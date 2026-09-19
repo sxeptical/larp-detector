@@ -28,7 +28,7 @@ async function refresh() {
       ? settings.openrouterApiKey
       : settings.apiKey;
     if (providerKey) {
-      keyEl.textContent = 'key: set ✓';
+      keyEl.textContent = 'key: set';
       keyEl.className = 'status status--ok';
     } else {
       keyEl.textContent =

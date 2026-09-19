@@ -248,17 +248,15 @@
   const RE_FOLLOW_LINE = /^[•·]?\s*(follow|following|connect|\+)$/i;
   const RE_SOCIAL_LINE = /(likes|liked|reposted|commented on|celebrates) this|and \d+ others/i;
   // Our own badge renders inside the card and pollutes innerText — filter it.
-  // The badge is inline-flex, so it usually appears as ONE line: "✅ REAL ONE"
-  // or "🎣 BAIT 41%" (and sometimes as separate emoji/label lines).
-  const RE_BADGE_LINE = /^(✅|☕|🧙|📊|🥀|🎣|🤖|💰|🎭)/u;
-  const RE_BADGE_LABEL = /^(real one|philosopher|10x engineer|influencer|martyr|bait|ai slop|sponsored|larp)$/i;
+  // The pill is inline-flex, so it appears as ONE line: "INFLUENCER | 33%".
+  const RE_BADGE_LABEL = /^(real one|philosopher|10x engineer|influencer|martyr|bait|ai slop|sponsored|larp)(\s*[|·]?\s*\d{1,3}%)?$/i;
   const RE_PERCENT = /^\d{1,3}%$/;
 
   function cardLines(el) {
     return el.innerText
       .split('\n')
       .map((l) => l.trim())
-      .filter((l) => l && !RE_BADGE_LINE.test(l) && !RE_BADGE_LABEL.test(l) && !RE_PERCENT.test(l));
+      .filter((l) => l && !RE_BADGE_LABEL.test(l) && !RE_PERCENT.test(l));
   }
 
   /**
@@ -424,7 +422,6 @@
       kind: 'sponsored',
       role: 'sponsored',
       label: 'SPONSORED',
-      emoji: '💰',
       color: 'gold',
       pct: null,
       score: null,
@@ -438,19 +435,75 @@
   // Badge rendering
   // -------------------------------------------------------------------------
   function badgesOf(el) {
-    return el.querySelectorAll(':scope > .larp-badge');
+    return el.querySelectorAll('.larp-badge');
+  }
+
+  /** Clear any pending fade timer before removing a badge. */
+  function disposeBadge(badge) {
+    if (badge._larpTimer) {
+      clearTimeout(badge._larpTimer);
+      badge._larpTimer = null;
+    }
+    badge.remove();
   }
 
   function purgeStaleBadges(el, urn) {
     for (const badge of badgesOf(el)) {
-      if (badge.dataset.urn !== urn) badge.remove();
+      if (badge.dataset.urn !== urn) disposeBadge(badge);
     }
   }
 
   function removeBadge(el, urn, kind) {
     for (const badge of badgesOf(el)) {
-      if (badge.dataset.urn === urn && (!kind || badge.dataset.kind === kind)) badge.remove();
+      if (badge.dataset.urn === urn && (!kind || badge.dataset.kind === kind)) disposeBadge(badge);
     }
+  }
+
+  /**
+   * Badges are transient: fade in, hold BADGE_VISIBLE_MS, fade out, remove.
+   * Tab-scroll re-visits don't re-trigger (analysis is keyed per node+urn);
+   * a re-rendered card or a new sighting does.
+   * `window.__larpBadgeVisibleMs` overrides the hold time (test harnesses).
+   */
+  const BADGE_VISIBLE_MS = 3000;
+  const BADGE_FADE_MS = 600;
+
+  function scheduleBadgeFade(badge) {
+    const override = Number(window.__larpBadgeVisibleMs);
+    const visibleMs = override > 0 ? override : BADGE_VISIBLE_MS;
+    badge._larpTimer = setTimeout(() => {
+      badge.classList.add('larp-badge--leaving');
+      badge._larpTimer = setTimeout(() => disposeBadge(badge), BADGE_FADE_MS);
+    }, visibleMs);
+  }
+
+  /**
+   * Place the badge under the post text (like a status chip), left-aligned.
+   * LinkedIn's wrappers are flex containers in unpredictable places, so in-flow
+   * insertion lands in odd spots depending on the card template. Rect math is
+   * deterministic across templates; the pill is transient, so a stale offset
+   * after a late reflow is not a concern.
+   */
+  function insertBadge(el, badge) {
+    const textSelector = SELECTORS.text.join(', ');
+    const textEl = el.querySelector(textSelector);
+
+    if (textEl && el.contains(textEl)) {
+      const cardRect = el.getBoundingClientRect();
+      const textRect = textEl.getBoundingClientRect();
+      el.classList.add('larp-post-anchor');
+      badge.classList.add('larp-badge--anchored');
+      badge.dataset.anchor = 'rect';
+      badge.style.top = `${Math.round(textRect.bottom - cardRect.top + 8)}px`;
+      badge.style.left = `${Math.round(textRect.left - cardRect.left)}px`;
+      el.appendChild(badge);
+      return;
+    }
+
+    el.classList.add('larp-post-anchor');
+    badge.classList.add('larp-badge--floating');
+    badge.dataset.anchor = 'corner';
+    el.appendChild(badge);
   }
 
   function showAnalyzing(el, urn) {
@@ -460,9 +513,8 @@
     badge.className = 'larp-badge larp-badge--analyzing';
     badge.dataset.urn = urn;
     badge.dataset.kind = 'analyzing';
-    badge.textContent = '⏳ checking for larp…';
-    el.classList.add('larp-post-anchor');
-    el.appendChild(badge);
+    badge.textContent = 'checking for larp…';
+    insertBadge(el, badge);
   }
 
   function applyVerdict(el, urn, verdict, show, opts = {}) {
@@ -494,37 +546,41 @@
     }
 
     const badge = document.createElement('div');
-    badge.className = `larp-badge larp-badge--${verdict.color || 'gray'}`;
+    badge.className = 'larp-badge';
     badge.dataset.urn = urn;
     badge.dataset.kind = 'verdict';
     badge.dataset.label = verdict.label || 'LARP';
     badge.dataset.pct = String(verdict.pct ?? '');
 
-    const emoji = document.createElement('span');
-    emoji.className = 'larp-badge__emoji';
-    emoji.textContent = verdict.emoji || '🎭';
+    const dot = document.createElement('span');
+    dot.className = `larp-badge__dot larp-badge__dot--${
+      verdict.kind === 'genuine' ? 'green' : verdict.kind === 'sponsored' ? 'gold' : 'red'
+    }`;
 
     const label = document.createElement('span');
     label.className = 'larp-badge__label';
     label.textContent = verdict.label || 'LARP';
 
-    badge.append(emoji, label);
+    badge.append(dot, label);
 
     if (typeof verdict.pct === 'number') {
+      const sep = document.createElement('span');
+      sep.className = 'larp-badge__sep';
+      sep.textContent = '|';
       const pct = document.createElement('span');
       pct.className = 'larp-badge__pct';
       pct.textContent = `${verdict.pct}%`;
-      badge.appendChild(pct);
+      badge.append(sep, pct);
     }
 
     badge.title = [`LARPING AS: ${verdict.label}`, ...(verdict.details || [])].join('\n');
 
-    el.classList.add('larp-post-anchor');
-    el.appendChild(badge);
+    insertBadge(el, badge);
+    scheduleBadgeFade(badge);
   }
 
   function removeAllBadges() {
-    for (const badge of document.querySelectorAll('.larp-badge')) badge.remove();
+    for (const badge of document.querySelectorAll('.larp-badge')) disposeBadge(badge);
     verdictByUrn.clear();
     verdictByText.clear();
     for (const el of document.querySelectorAll(POST_SELECTOR)) {

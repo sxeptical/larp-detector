@@ -79,26 +79,26 @@ $('test').addEventListener('click', async () => {
   const res = await send({ type: 'TEST_PROVIDER' });
   if (!res?.ok) {
     box.classList.add('result--bad');
-    box.textContent = `✗ ${res?.error || 'Unknown error'}`;
+    box.textContent = `failed — ${res?.error || 'Unknown error'}`;
     return;
   }
 
   const v = res.verdict;
   box.classList.add('result--ok');
   const lines = [
-    `✓ provider responded in ${res.latencyMs}ms`,
+    `ok — provider responded in ${res.latencyMs}ms`,
     `source:  ${res.source}`,
     `model:   ${res.model || '—'}`,
   ];
   if (v) {
-    lines.push('', `${v.emoji} ${v.label} · ${v.pct ?? '?'}%  (intensity ${v.score ?? '?'} / 4)`, ...v.details);
+    lines.push('', `${v.label} · ${v.pct ?? '?'}%  (intensity ${v.score ?? '?'} / 4)`, ...v.details);
   }
   box.textContent = lines.join('\n');
 });
 
 $('clear').addEventListener('click', async () => {
   await send({ type: 'CLEAR_CACHE' });
-  $('clear-status').textContent = 'cache cleared ✓';
+  $('clear-status').textContent = 'cache cleared';
   setTimeout(() => ($('clear-status').textContent = ''), 2500);
 });
 

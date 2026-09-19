@@ -38,16 +38,16 @@ const CASES = [
     expect: 'Y2 Banking and Finance student | MILK Scholar',
   },
   {
-    name: 'badge-polluted lines (our badge inside the card)',
-    lines: ['✅', 'REAL ONE', 'Feed post', 'Chua Jia Wei', '• 2nd', 'Y2 Banking & Finance Student│ Ngee Ann Poly', '21h', 'Follow', '🏆 CHAMPIONS!'],
-    post: '🏆 CHAMPIONS!',
+    name: 'badge-polluted lines (new pill, label + pipe + pct)',
+    lines: ['INFLUENCER | 33%', 'Feed post', 'Name', '• 2nd', 'Y2 Banking & Finance Student│ Ngee Ann Poly', '1w', 'Follow', 'CHAMPIONS!'],
+    post: 'CHAMPIONS!',
     expect: 'Y2 Banking & Finance Student│ Ngee Ann Poly',
   },
   {
-    name: 'badge-polluted lines (inline badge, one line)',
-    lines: ['🎣 BAIT 41%', 'Feed post', 'Esmond Low likes this', 'Xue Yi Fun', '• 2nd', 'Y2 Banking and Finance student | MILK Scholar', '1w', 'Follow', 'I don’t think...'],
-    post: 'I don’t think...',
-    expect: 'Y2 Banking and Finance student | MILK Scholar',
+    name: 'badge-polluted lines (label + pct, no pipe)',
+    lines: ['PHILOSOPHER 60%', 'Feed post', 'Suggested', 'Name', '• 3rd+', 'Venture Builder & Investor', '2d', 'Follow', 'Some post text right here.'],
+    post: 'Some post text right here.',
+    expect: 'Venture Builder & Investor',
   },
   {
     name: 'company post: no headline, body in the slot',
@@ -92,7 +92,7 @@ for (const c of CASES) {
   const got = run(c.lines, c.post);
   const ok = got === c.expect;
   if (!ok) failures++;
-  console.log(`${ok ? '✓' : '✗'} ${c.name}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'} ${c.name}`);
   if (!ok) console.log(`    expected: ${JSON.stringify(c.expect)}\n    got:      ${JSON.stringify(got)}`);
 }
 

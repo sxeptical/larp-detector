@@ -8,6 +8,10 @@ const css = fs.readFileSync(`${ROOT}/content/content.css`, 'utf8');
 
 // Fresh page = only ONE content-script instance (production-like). Old test
 // injections from earlier runs can't be torn down retroactively.
+if (!page.url().includes('linkedin.com')) {
+  await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(4000);
+}
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(5000);
 
@@ -68,7 +72,7 @@ const result = await page.evaluate(() => {
       return {
         id: shorten(el.getAttribute('componentkey'), 30),
         textLen: textEl ? textEl.innerText.trim().length : -1,
-        badge: shorten(el.querySelector(':scope > .larp-badge')?.innerText, 28) || null,
+        badge: shorten(el.querySelector('.larp-badge')?.innerText, 28) || null,
       };
     }),
     log: (window.__larpTestLog || []).map((e) => ({
@@ -80,5 +84,12 @@ const result = await page.evaluate(() => {
   };
 });
 
+// Back to the top of the feed for the screenshot, with badges still held
+// (the test bundle sets __larpBadgeVisibleMs = 60000)
+const firstCard = await page.$$('[componentkey^="update-card-focus"]');
+if (firstCard.length > 0) {
+  await firstCard[0].scrollIntoViewIfNeeded();
+  await page.waitForTimeout(1200);
+}
 await page.screenshot({ path: `${ROOT}/dev/linkedin-sweep.png`, fullPage: false });
 return { scrollProbe, swept: sweep, ...result };

@@ -118,7 +118,7 @@ for (const sample of SAMPLES) {
   const { verdict } = await runSample(sample);
   const shown = verdict && shouldShow(verdict, showSettings);
   const line = verdict
-    ? `${verdict.emoji} ${verdict.label.padEnd(12)} ${String(verdict.pct ?? '–').padStart(3)}%  intensity ${verdict.score}`
+    ? `${verdict.label.padEnd(12)} ${String(verdict.pct ?? '–').padStart(3)}%  intensity ${verdict.score}`
     : 'no verdict';
   console.log(`${sample.label.padEnd(20)} ${shown ? ' ' : '(hidden) '} ${line}`);
   if (!verdict) mismatches++;

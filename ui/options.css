@@ -36,8 +36,15 @@ main {
 }
 
 h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 22px;
   margin: 0 0 20px;
+}
+
+h1 img {
+  border-radius: 6px;
 }
 
 h1 span {

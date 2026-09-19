@@ -1,34 +1,43 @@
-# 🦀 LARP Detector for LinkedIn
+# LARP Detector for LinkedIn
 
 A Chrome extension that detects LinkedIn LARP as you scroll.
 
 **LARP** here means *identity performance*: playing the character of visionary
 executive, elite expert, or thought leader instead of showing real work. The
 extension judges each feed post with [Jev](https://typesafe.ai) — TypeSafe AI's
-"System One" decision model — and pins a badge on the post:
+"System One" decision model — and drops a small status pill under the post:
 
 | Badge | The character being played |
 | --- | --- |
-| ☕ `PHILOSOPHER` | Profound lessons from a lukewarm coffee |
-| 🧙 `10X ENGINEER` | "Scaled to 50M users in 3 weekends" (no architecture, no receipts) |
-| 📊 `INFLUENCER` | Follower-count flexing, "grateful to announce", Top Voice |
-| 🥀 `MARTYR` | 4am alarms, streaks, suffering-as-virtue |
-| 🎣 `BAIT` | "Agree?", "Repost if", cliffhangers |
-| 🤖 `AI SLOP` | Machine-made costume: emoji listicles, hollow inspiration |
-| 💰 `SPONSORED` | Paid placement (detected from the page, no API call) |
-| ✅ `REAL ONE` | Receipts on the table (off by default) |
+| `PHILOSOPHER` | Profound lessons from a lukewarm coffee |
+| `10X ENGINEER` | "Scaled to 50M users in 3 weekends" (no architecture, no receipts) |
+| `INFLUENCER` | Follower-count flexing, "grateful to announce", Top Voice |
+| `MARTYR` | 4am alarms, streaks, suffering-as-virtue |
+| `BAIT` | "Agree?", "Repost if", cliffhangers |
+| `AI SLOP` | Machine-made costume: emoji listicles, hollow inspiration |
+| `SPONSORED` | Paid placement (detected from the page, no API call) |
+| `REAL ONE` | Receipts on the table (off by default) |
+
+Each pill looks like `• INFLUENCER | 73%` — a colored dot (red for larp, green
+for real, gold for sponsored) plus the label and confidence. Badges are
+**transient**: they fade in under the post text, hold for about three seconds,
+then fade out and remove themselves. Hover during the hold for the full
+probability breakdown.
 
 ## Install
 
 1. Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**,
    and select this folder.
-2. Click the 🦀 icon → **Options**, paste a TypeSafe API key
+2. Click the crab icon in the toolbar → **Options**, paste a TypeSafe API key
    (join the waitlist at [typesafe.ai](https://typesafe.ai) — access clears in
    about a day), and hit **Test connection**.
-3. Open LinkedIn, scroll, enjoy the badges. Hover a badge for the full breakdown.
+3. Open LinkedIn, scroll, watch the pills appear. If a LinkedIn tab was already
+   open when you installed, reload it first — Chrome doesn't inject into
+   existing tabs.
 
 No key yet? Set provider to **Mock** — the heuristics engine runs the whole
-pipeline offline so you can develop and demo without the API.
+pipeline offline so you can develop and demo without the API. In mock mode,
+enable "Also badge the REAL ONEs" in the popup to see every verdict.
 
 ## Providers
 
@@ -82,6 +91,9 @@ Design decisions worth knowing:
 - **Headlines are parsed from card text lines** — the current UI has no stable
   selector for the actor subtitle. `dev/test-headline-parser.mjs` tests the real
   parser against line arrays sampled from the live feed.
+- **Badges are transient pills, placed in-flow.** They render under the post
+  text (falling back to a floating pill when no anchor exists), hold ~3s, then
+  fade out. `window.__larpBadgeVisibleMs` overrides the hold time in tests.
 - **The key never touches the page.** It lives in `chrome.storage.local` and is
   only read by the service worker.
 

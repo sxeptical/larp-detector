@@ -118,7 +118,7 @@ function call(message) {
 
 let failures = 0;
 function check(name, condition, extra = '') {
-  const mark = condition ? '✓' : '✗';
+  const mark = condition ? 'PASS' : 'FAIL';
   if (!condition) failures++;
   console.log(`${mark} ${name}${extra ? `  — ${extra}` : ''}`);
 }
@@ -153,11 +153,11 @@ check('GET_SETTINGS reads back persisted settings', res.ok && res.settings.provi
 res = await call({ type: 'ANALYZE_POST', post: COFFEE });
 const coffeeLabel = res.verdict?.label;
 check('ANALYZE_POST returns a verdict', res.ok && Boolean(res.verdict), res.verdict?.label);
-check('coffee parable → PHILOSOPHER', res.verdict?.role === 'philosopher', `${res.verdict?.emoji} ${res.verdict?.label} ${res.verdict?.pct}%`);
+check('coffee parable → PHILOSOPHER', res.verdict?.role === 'philosopher', `${res.verdict?.label} ${res.verdict?.pct}%`);
 check('coffee parable is shown at default sensitivity', res.show === true);
 
 res = await call({ type: 'ANALYZE_POST', post: HEADLINE_COSTUME });
-check('tech-larp + costume headline → 10X ENGINEER', res.verdict?.role === 'tech_visionary', `${res.verdict?.emoji} ${res.verdict?.label} ${res.verdict?.pct}%`);
+check('tech-larp + costume headline → 10X ENGINEER', res.verdict?.role === 'tech_visionary', `${res.verdict?.label} ${res.verdict?.pct}%`);
 
 // 3. Cache: second call is a hit, same verdict
 const again = await call({ type: 'ANALYZE_POST', post: COFFEE });
@@ -202,7 +202,7 @@ const DECISIONS_POST = {
 
 await call({ type: 'SET_SETTINGS', patch: { provider: 'openrouter', openrouterApiKey: 'sk-or-test', model: '' } });
 res = await call({ type: 'ANALYZE_POST', post: DECISIONS_POST });
-check('Decisions API returns a composed verdict', res.ok && res.verdict?.role === 'tech_visionary', `${res.verdict?.emoji} ${res.verdict?.label} ${res.verdict?.pct}%`);
+check('Decisions API returns a composed verdict', res.ok && res.verdict?.role === 'tech_visionary', `${res.verdict?.label} ${res.verdict?.pct}%`);
 check('Decisions request went to /api/alpha/decisions', decisionsCalls.length === 1);
 check('Decisions request used typesafe/jev-1.13 by default', decisionsCalls[0]?.model === 'typesafe/jev-1.13', decisionsCalls[0]?.model);
 check('Decisions request carries state and the full question set', Boolean(decisionsCalls[0]?.state?.post_text) && Boolean(decisionsCalls[0]?.questions?.larp_role));
@@ -224,7 +224,7 @@ const CHAT_POST = {
 
 await call({ type: 'SET_SETTINGS', patch: { provider: 'openrouter-chat', openrouterApiKey: 'sk-or-test', model: '' } });
 res = await call({ type: 'ANALYZE_POST', post: CHAT_POST });
-check('chat estimate returns a composed verdict', res.ok && res.verdict?.role === 'tech_visionary', `${res.verdict?.emoji} ${res.verdict?.label} ${res.verdict?.pct}%`);
+check('chat estimate returns a composed verdict', res.ok && res.verdict?.role === 'tech_visionary', `${res.verdict?.label} ${res.verdict?.pct}%`);
 check('chat request used the chat default model', chatCalls[0]?.model === 'deepseek/deepseek-v4-flash', chatCalls[0]?.model);
 check('chat request used json_schema response format', chatCalls[0]?.response_format?.type === 'json_schema');
 check('chat request includes every taxonomy question in the prompt', String(chatCalls[0]?.messages?.[0]?.content).includes('larp_role'));
