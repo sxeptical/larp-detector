@@ -438,12 +438,7 @@
     return el.querySelectorAll('.larp-badge');
   }
 
-  /** Clear any pending fade timer before removing a badge. */
   function disposeBadge(badge) {
-    if (badge._larpTimer) {
-      clearTimeout(badge._larpTimer);
-      badge._larpTimer = null;
-    }
     badge.remove();
   }
 
@@ -460,50 +455,57 @@
   }
 
   /**
-   * Badges are transient: fade in, hold BADGE_VISIBLE_MS, fade out, remove.
-   * Tab-scroll re-visits don't re-trigger (analysis is keyed per node+urn);
-   * a re-rendered card or a new sighting does.
-   * `window.__larpBadgeVisibleMs` overrides the hold time (test harnesses).
-   */
-  const BADGE_VISIBLE_MS = 3000;
-  const BADGE_FADE_MS = 600;
-
-  function scheduleBadgeFade(badge) {
-    const override = Number(window.__larpBadgeVisibleMs);
-    const visibleMs = override > 0 ? override : BADGE_VISIBLE_MS;
-    badge._larpTimer = setTimeout(() => {
-      badge.classList.add('larp-badge--leaving');
-      badge._larpTimer = setTimeout(() => disposeBadge(badge), BADGE_FADE_MS);
-    }, visibleMs);
-  }
-
-  /**
-   * Place the badge under the post text (like a status chip), left-aligned.
+   * Place the pill under the post text (like a status chip), left-aligned.
    * LinkedIn's wrappers are flex containers in unpredictable places, so in-flow
    * insertion lands in odd spots depending on the card template. Rect math is
-   * deterministic across templates; the pill is transient, so a stale offset
-   * after a late reflow is not a concern.
+   * deterministic across templates.
+   *
+   * Virtualized cards are sometimes analyzed before they have layout (rects of
+   * zero size), which would pin the pill far outside the card. In that case we
+   * re-measure on the next frame and fall back to the corner pill if the card
+   * still has no usable geometry.
    */
-  function insertBadge(el, badge) {
-    const textSelector = SELECTORS.text.join(', ');
-    const textEl = el.querySelector(textSelector);
-
-    if (textEl && el.contains(textEl)) {
-      const cardRect = el.getBoundingClientRect();
-      const textRect = textEl.getBoundingClientRect();
-      el.classList.add('larp-post-anchor');
-      badge.classList.add('larp-badge--anchored');
-      badge.dataset.anchor = 'rect';
-      badge.style.top = `${Math.round(textRect.bottom - cardRect.top + 8)}px`;
-      badge.style.left = `${Math.round(textRect.left - cardRect.left)}px`;
-      el.appendChild(badge);
-      return;
-    }
-
+  function placeCorner(el, badge) {
     el.classList.add('larp-post-anchor');
     badge.classList.add('larp-badge--floating');
     badge.dataset.anchor = 'corner';
     el.appendChild(badge);
+  }
+
+  function insertBadge(el, badge) {
+    const textSelector = SELECTORS.text.join(', ');
+    const textEl = el.querySelector(textSelector);
+    if (!textEl || !el.contains(textEl)) {
+      placeCorner(el, badge);
+      return;
+    }
+
+    const measure = () => {
+      const cardRect = el.getBoundingClientRect();
+      const textRect = textEl.getBoundingClientRect();
+      return {
+        hasLayout: Boolean((textRect.width || textRect.height) && (cardRect.width || cardRect.height)),
+        top: Math.round(textRect.bottom - cardRect.top + 8),
+        left: Math.round(textRect.left - cardRect.left),
+      };
+    };
+
+    const place = () => {
+      const { hasLayout, top, left } = measure();
+      if (!hasLayout || top < 0 || left < -2) return false;
+      el.classList.add('larp-post-anchor');
+      badge.classList.add('larp-badge--anchored');
+      badge.dataset.anchor = 'rect';
+      badge.style.top = `${top}px`;
+      badge.style.left = `${Math.max(0, left)}px`;
+      el.appendChild(badge);
+      return true;
+    };
+
+    if (place()) return;
+    requestAnimationFrame(() => {
+      if (!place()) placeCorner(el, badge);
+    });
   }
 
   function showAnalyzing(el, urn) {
@@ -576,7 +578,6 @@
     badge.title = [`LARPING AS: ${verdict.label}`, ...(verdict.details || [])].join('\n');
 
     insertBadge(el, badge);
-    scheduleBadgeFade(badge);
   }
 
   function removeAllBadges() {

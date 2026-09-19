@@ -19,10 +19,9 @@ extension judges each feed post with [Jev](https://typesafe.ai) — TypeSafe AI'
 | `REAL ONE` | Receipts on the table (off by default) |
 
 Each pill looks like `• INFLUENCER | 73%` — a colored dot (red for larp, green
-for real, gold for sponsored) plus the label and confidence. Badges are
-**transient**: they fade in under the post text, hold for about three seconds,
-then fade out and remove themselves. Hover during the hold for the full
-probability breakdown.
+for real, gold for sponsored) plus the label and confidence. Pills appear under
+the post text and stay there while you scroll; hover for the full probability
+breakdown.
 
 ## Install
 
@@ -91,9 +90,9 @@ Design decisions worth knowing:
 - **Headlines are parsed from card text lines** — the current UI has no stable
   selector for the actor subtitle. `dev/test-headline-parser.mjs` tests the real
   parser against line arrays sampled from the live feed.
-- **Badges are transient pills, placed in-flow.** They render under the post
-  text (falling back to a floating pill when no anchor exists), hold ~3s, then
-  fade out. `window.__larpBadgeVisibleMs` overrides the hold time in tests.
+- **Badges are status pills under the post text.** No emoji, no animations for
+  now — they render once and stay while you scroll (the rect anchor keeps them
+  under the text across LinkedIn's card templates).
 - **The key never touches the page.** It lives in `chrome.storage.local` and is
   only read by the service worker.
 

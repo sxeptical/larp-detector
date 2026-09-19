@@ -23,7 +23,6 @@ const out = await page.evaluate(() => {
     url: location.href,
     badgeCount: badges.length,
     badges,
-    visibleMsOverride: window.__larpBadgeVisibleMs ?? null,
     debug: window.__larpDebug ?? null,
     emojiSpanCount: document.querySelectorAll('.larp-badge__emoji').length,
   };

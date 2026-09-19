@@ -31,8 +31,6 @@ try {
   if (typeof window.__larpTeardown === 'function') window.__larpTeardown();
   window.__larpDetectorLoaded = false;
   window.__larpDebug = undefined;
-  // Keep badges on screen for 60s in tests so they can be inspected/screenshotted
-  window.__larpBadgeVisibleMs = 60000;
   document.querySelectorAll('.larp-badge').forEach((b) => b.remove());
   document
     .querySelectorAll('[data-larp-observed]')

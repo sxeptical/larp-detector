@@ -1,12 +1,8 @@
 /**
  * LARP Detector — badge styles.
  *
- * Badge = small neutral pill that sits IN-FLOW under the post text, like a
- * status chip: [dot] LABEL | NN%. It fades in, holds ~3 seconds (see
- * BADGE_VISIBLE_MS in content.js), then fades out and removes itself.
- *
- * A floating dark pill is kept as a fallback (`.larp-badge--floating`) for
- * cards where no in-flow anchor could be found.
+ * Badge = small status pill under the post text: [dot] LABEL | NN%.
+ * No emoji, no animations for now — the pill appears and stays there.
  */
 
 .larp-post-anchor {
@@ -36,33 +32,6 @@
 
   cursor: help;
   user-select: none;
-
-  opacity: 0;
-  animation: larp-badge-in 350ms ease-out forwards;
-}
-
-@keyframes larp-badge-in {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.larp-badge--leaving {
-  animation: larp-badge-out 600ms ease-in forwards;
-}
-
-@keyframes larp-badge-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
 }
 
 @media (prefers-color-scheme: dark) {

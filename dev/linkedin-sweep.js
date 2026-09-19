@@ -84,8 +84,7 @@ const result = await page.evaluate(() => {
   };
 });
 
-// Back to the top of the feed for the screenshot, with badges still held
-// (the test bundle sets __larpBadgeVisibleMs = 60000)
+// Back to the top of the feed for the screenshot (badges persist now)
 const firstCard = await page.$$('[componentkey^="update-card-focus"]');
 if (firstCard.length > 0) {
   await firstCard[0].scrollIntoViewIfNeeded();
