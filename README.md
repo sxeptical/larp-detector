@@ -76,10 +76,12 @@ Design decisions worth knowing:
   question is asked at once; the code decides which answers matter.
 - **Cost is a rounding error**: ~$0.042 per million input tokens — a whole
   feed-scrolling session costs less than a cent.
-- **Identity is `data-urn`**, not classes. LinkedIn's feed is virtualized and
-  recycles nodes; the content script re-checks the urn of every node it sees,
-  and both the page and the worker keep verdict caches so re-scrolled posts
-  re-badge instantly with no API call.
+- **Identity is `componentkey`, not `data-urn`** (LinkedIn dropped `data-urn`
+  from feed posts in the 2026-09 UI; verified against the live DOM). Cards are
+  re-rendered with new ids, so content-hash fallbacks keep verdicts attached.
+- **Headlines are parsed from card text lines** — the current UI has no stable
+  selector for the actor subtitle. `dev/test-headline-parser.mjs` tests the real
+  parser against line arrays sampled from the live feed.
 - **The key never touches the page.** It lives in `chrome.storage.local` and is
   only read by the service worker.
 
@@ -102,6 +104,15 @@ TYPESAFE_API_KEY=... node dev/preview.mjs --live                    # through re
 OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter     # through Jev via OpenRouter Decisions
 OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter-chat # through the chat-model estimate
 node dev/smoke.mjs            # integration test: real service worker, mocked endpoints
+node dev/test-headline-parser.mjs   # headline parser vs lines sampled from the live feed
+```
+
+Browser-test the content script on the real LinkedIn DOM (uses the
+Browser Control CLI; needs a logged-in LinkedIn tab attached):
+
+```bash
+node dev/build-test-bundle.mjs                 # real content script + libs + chrome shim
+browser-control execute --session <id> --file dev/linkedin-sweep.js
 ```
 
 Edit the `SAMPLES` array in `dev/preview.mjs` — when you pre-label real feed

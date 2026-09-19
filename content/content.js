@@ -19,17 +19,28 @@
 
   // -------------------------------------------------------------------------
   // Selectors — when LinkedIn changes its DOM, fix it here.
+  // Verified against the live feed on 2026-09-19: posts are
+  //   [componentkey^="update-card-focus"]  (role=listitem, no data-urn anymore)
+  //   text: [data-testid="expandable-text-box"]
+  // Legacy selectors are kept as fallbacks for older/AB-tested UIs.
   // -------------------------------------------------------------------------
   const SELECTORS = {
-    feedRoots: ['div[data-testid="mainFeed"]', '.scaffold-finite-scroll__content', 'main'],
-    posts: ['div[data-urn^="urn:li:activity:"]', 'div[data-urn^="urn:li:ugcPost:"]'],
+    feedRoots: ['[data-testid="mainFeed"]', '.scaffold-finite-scroll__content', 'main'],
+    posts: [
+      '[componentkey^="update-card-focus"]', // current LinkedIn (2026-09)
+      'div[data-urn^="urn:li:activity:"]', // legacy
+      'div[data-urn^="urn:li:ugcPost:"]', // legacy
+      'div.feed-shared-update-v2[data-urn]', // legacy
+    ],
     text: [
+      '[data-testid="expandable-text-box"]', // current LinkedIn (2026-09)
       '.feed-shared-update-v2__description',
       '.update-components-text',
       '.feed-shared-inline-show-more-text',
       '.feed-shared-text',
-      '[data-testid="expandable-text-box"]',
     ],
+    // Legacy DOM only — the current UI has no stable selector for the actor
+    // subtitle, so headlines are parsed from the card's text lines instead.
     headline: ['.update-components-actor__description', '.feed-shared-actor__description'],
     actor: ['.update-components-actor', '.feed-shared-actor'],
   };
@@ -45,13 +56,27 @@
 
   /** urn -> { verdict, show } — lets recycled/re-scrolled posts re-badge with no round-trip */
   const verdictByUrn = new Map();
+  /** textHash -> { verdict, show } — LinkedIn re-renders cards with NEW ids for the
+   *  same post, so identity needs a content fallback to avoid re-analyzing. */
+  const verdictByText = new Map();
   /** node -> urn last analyzed for that node (nodes get recycled) */
   const analyzedNodeUrn = new WeakMap();
 
   let intersectionObserver = null;
+  let mutationObserver = null;
   let mutationTimer = null;
   let scanTimer = null;
   let localAnalyzerPromise = null;
+
+  /** Debug counters — read from the console or the browser-control test harness. */
+  const debug = (window.__larpDebug = {
+    scans: 0,
+    observed: 0,
+    visible: 0,
+    analyzed: 0,
+    skipped: 0,
+    lastScanAt: 0,
+  });
 
   // -------------------------------------------------------------------------
   // Boot
@@ -106,7 +131,7 @@
   }
 
   function setupMutationObserver() {
-    const observer = new MutationObserver((mutations) => {
+    mutationObserver = new MutationObserver((mutations) => {
       let interesting = false;
       for (const m of mutations) {
         for (const node of m.addedNodes) {
@@ -122,7 +147,7 @@
       clearTimeout(mutationTimer);
       mutationTimer = setTimeout(scheduleScan, 250);
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
   }
 
   function patchHistory() {
@@ -157,6 +182,8 @@
 
   function scan() {
     if (!settings.enabled) return;
+    debug.scans++;
+    debug.lastScanAt = Date.now();
     for (const root of feedRoots()) {
       for (const el of root.querySelectorAll(POST_SELECTOR)) {
         observePost(el);
@@ -169,6 +196,7 @@
     if (el.parentElement?.closest(POST_SELECTOR)) return;
     if (!el.dataset.larpObserved) {
       el.dataset.larpObserved = '1';
+      debug.observed++;
       intersectionObserver.observe(el);
     }
     // Already visible (e.g. after a rescan)? Analyze immediately.
@@ -190,7 +218,81 @@
   // Extraction
   // -------------------------------------------------------------------------
   function urnOf(el) {
-    return el.getAttribute('data-urn') || el.closest('[data-urn]')?.getAttribute('data-urn') || null;
+    return (
+      el.getAttribute('data-urn') ||
+      el.closest('[data-urn]')?.getAttribute('data-urn') ||
+      el.getAttribute('componentkey') || // current LinkedIn: update-card-focus<id>FeedType_...
+      el.closest('[componentkey^="update-card-focus"]')?.getAttribute('componentkey') ||
+      null
+    );
+  }
+
+  /** FNV-1a — content identity fallback when the DOM id changes between renders. */
+  function textHash(s) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(36);
+  }
+
+  // -------------------------------------------------------------------------
+  // Card-text parsers — the current UI has no stable class/testid anchors for
+  // actor chrome, so we parse the card's rendered lines. Durable against
+  // LinkedIn's hashed-class churn; adjust the patterns when the layout shifts.
+  // -------------------------------------------------------------------------
+  const RE_CHROME_LINE = /^(feed post|suggested|promoted|sponsored)$/i;
+  const RE_TIME_LINE = /^\d+(s|m|h|d|w|mo|y)(\s*[•·]\s*edited)?$/i;
+  const RE_DEGREE_LINE = /^[•·]\s*\d+(st|nd|rd|th)\+?$/i;
+  const RE_FOLLOW_LINE = /^[•·]?\s*(follow|following|connect|\+)$/i;
+  const RE_SOCIAL_LINE = /(likes|liked|reposted|commented on|celebrates) this|and \d+ others/i;
+  // Our own badge renders inside the card and pollutes innerText — filter it.
+  // The badge is inline-flex, so it usually appears as ONE line: "✅ REAL ONE"
+  // or "🎣 BAIT 41%" (and sometimes as separate emoji/label lines).
+  const RE_BADGE_LINE = /^(✅|☕|🧙|📊|🥀|🎣|🤖|💰|🎭)/u;
+  const RE_BADGE_LABEL = /^(real one|philosopher|10x engineer|influencer|martyr|bait|ai slop|sponsored|larp)$/i;
+  const RE_PERCENT = /^\d{1,3}%$/;
+
+  function cardLines(el) {
+    return el.innerText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !RE_BADGE_LINE.test(l) && !RE_BADGE_LABEL.test(l) && !RE_PERCENT.test(l));
+  }
+
+  /**
+   * Headline = the line between "<name> [• 3rd+]" and the timestamp, e.g.
+   *   Feed post / Suggested / Fathan Kartagama / • 3rd+ / <HEADLINE> / 2d / Follow
+   * Company pages have no headline line — then the next line is the post body,
+   * which we must not mistake for one.
+   */
+  function extractHeadlineFromLines(lines, postText) {
+    let i = 0;
+    while (i < lines.length && (RE_CHROME_LINE.test(lines[i]) || RE_SOCIAL_LINE.test(lines[i]))) i++;
+    i++; // skip the author name
+    while (i < lines.length && (RE_DEGREE_LINE.test(lines[i]) || RE_CHROME_LINE.test(lines[i]))) i++;
+    while (i < lines.length && (RE_TIME_LINE.test(lines[i]) || RE_FOLLOW_LINE.test(lines[i]))) i++;
+    const candidate = lines[i] || '';
+    if (!candidate || RE_TIME_LINE.test(candidate) || RE_FOLLOW_LINE.test(candidate)) return '';
+
+    // Company posts: the "headline" slot holds the post body — reject that.
+    const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    const firstBodyLine = norm(postText.split('\n')[0]);
+    const c = norm(candidate);
+    if (firstBodyLine && (c.startsWith(firstBodyLine.slice(0, 30)) || firstBodyLine.startsWith(c))) {
+      return '';
+    }
+    return candidate.slice(0, 200);
+  }
+
+  function isPromotedCard(el, lines) {
+    if (lines.slice(0, 4).some((l) => /^promoted$/i.test(l))) return true;
+    for (const sel of SELECTORS.actor) {
+      const actorText = el.querySelector(sel)?.innerText?.slice(0, 200) || '';
+      if (/\bpromoted\b/i.test(actorText)) return true;
+    }
+    return false;
   }
 
   function extractPost(el) {
@@ -203,7 +305,10 @@
       const text = node?.innerText?.trim() || '';
       if (text.length > post_text.length) post_text = text;
     }
-    post_text = post_text.slice(0, MAX_TEXT_CHARS);
+    post_text = post_text
+      .replace(/\s*…?\s*see more\s*$/i, '')
+      .trim()
+      .slice(0, MAX_TEXT_CHARS);
 
     let author_headline = '';
     for (const sel of SELECTORS.headline) {
@@ -214,17 +319,10 @@
       }
     }
 
-    let isPromoted = false;
-    for (const sel of SELECTORS.actor) {
-      const actorText = el.querySelector(sel)?.innerText?.slice(0, 200) || '';
-      if (/\bpromoted\b/i.test(actorText)) {
-        isPromoted = true;
-        break;
-      }
-      if (actorText) break;
-    }
+    const lines = cardLines(el);
+    if (!author_headline) author_headline = extractHeadlineFromLines(lines, post_text);
 
-    return { urn, post_text, author_headline, isPromoted };
+    return { urn, post_text, author_headline, isPromoted: isPromotedCard(el, lines) };
   }
 
   // -------------------------------------------------------------------------
@@ -233,6 +331,7 @@
   function onPostVisible(el, force = false) {
     const urn = urnOf(el);
     if (!urn) return;
+    debug.visible++;
 
     // Node recycled to a different post? Drop stale badges first.
     purgeStaleBadges(el, urn);
@@ -256,8 +355,23 @@
       applyVerdict(el, urn, sponsored(), true, { store: true });
       return;
     }
-    if (!post.post_text || post.post_text.trim().length < 20) return;
+    if (!post.post_text || post.post_text.trim().length < 20) {
+      debug.skipped++;
+      return;
+    }
 
+    // Same post rendered as a fresh card (new componentkey)? Re-badge from the
+    // text cache without another analysis round-trip. Hash a normalized prefix:
+    // LinkedIn re-renders long posts with different collapse/truncation states,
+    // and the prefix is what stays stable across those renders.
+    const textKey = textHash(post.post_text.slice(0, 160).toLowerCase());
+    const knownByText = verdictByText.get(textKey);
+    if (knownByText && !force) {
+      applyVerdict(el, urn, knownByText.verdict, knownByText.show);
+      return;
+    }
+
+    debug.analyzed++;
     showAnalyzing(el, urn);
 
     chrome.runtime.sendMessage({ type: 'ANALYZE_POST', post }, (res) => {
@@ -269,10 +383,13 @@
       if (urnOf(el) !== urn) {
         // Node was recycled while the answer was in flight — stash it so the
         // post re-badges instantly when it scrolls back into view.
-        if (res.verdict) verdictByUrn.set(urn, { verdict: res.verdict, show: res.show });
+        if (res.verdict) {
+          verdictByUrn.set(urn, { verdict: res.verdict, show: res.show });
+          verdictByText.set(textKey, { verdict: res.verdict, show: res.show });
+        }
         return;
       }
-      applyVerdict(el, urn, res.verdict, res.show, { store: true });
+      applyVerdict(el, urn, res.verdict, res.show, { store: true, textKey });
     });
   }
 
@@ -293,9 +410,10 @@
       if (!verdict) return;
       if (urnOf(el) !== urn) {
         verdictByUrn.set(urn, { verdict, show: show(verdict, settings) });
+        verdictByText.set(textKey, { verdict, show: show(verdict, settings) });
         return;
       }
-      applyVerdict(el, urn, verdict, show(verdict, settings), { store: true });
+      applyVerdict(el, urn, verdict, show(verdict, settings), { store: true, textKey });
     } catch (err) {
       console.warn('[LARP] local analysis failed', err);
     }
@@ -370,7 +488,10 @@
       return;
     }
 
-    if (opts.store) verdictByUrn.set(urn, { verdict, show });
+    if (opts.store) {
+      verdictByUrn.set(urn, { verdict, show });
+      if (opts.textKey && verdict) verdictByText.set(opts.textKey, { verdict, show });
+    }
 
     const badge = document.createElement('div');
     badge.className = `larp-badge larp-badge--${verdict.color || 'gray'}`;
@@ -405,6 +526,7 @@
   function removeAllBadges() {
     for (const badge of document.querySelectorAll('.larp-badge')) badge.remove();
     verdictByUrn.clear();
+    verdictByText.clear();
     for (const el of document.querySelectorAll(POST_SELECTOR)) {
       analyzedNodeUrn.delete(el);
       delete el.dataset.larpObserved;
@@ -414,6 +536,14 @@
   // -------------------------------------------------------------------------
   // Cleanup / bfcache
   // -------------------------------------------------------------------------
+  /** Lets a test harness (or a session teardown) stop this instance cleanly. */
+  window.__larpTeardown = () => {
+    clearInterval(scanTimer);
+    scanTimer = null;
+    intersectionObserver?.disconnect();
+    mutationObserver?.disconnect();
+  };
+
   window.addEventListener('pagehide', () => {
     clearInterval(scanTimer);
     scanTimer = null;

@@ -10,3 +10,7 @@ npm-debug.log*
 .env.*
 *.pem
 *.key
+
+# Generated test artifacts
+dev/test-bundle.js
+dev/*.png

@@ -6,6 +6,9 @@
   "type": "module",
   "scripts": {
     "preview": "node dev/preview.mjs",
-    "smoke": "node dev/smoke.mjs"
+    "smoke": "node dev/smoke.mjs",
+    "test:headline": "node dev/test-headline-parser.mjs",
+    "bundle:test": "node dev/build-test-bundle.mjs",
+    "icons": "python3 dev/make-icons.py"
   }
 }
