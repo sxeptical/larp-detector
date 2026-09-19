@@ -24,18 +24,14 @@ globalThis.fetch = async (url, opts) => {
       id: 'gen-smoke-decisions',
       model: 'typesafe/jev-1.13-20260917',
       answers: {
-        persona_performance: { type: 'noul', noul: 0.97 },
+        work_shown: { type: 'noul', noul: 0.04 },
+        image_crafted: { type: 'noul', noul: 0.96 },
         stat_farming: { type: 'noul', noul: 0.85 },
         grandiose_claims: { type: 'noul', noul: 0.95 },
         technical_specifics: { type: 'noul', noul: 0.02 },
         headline_larp: { type: 'noul', noul: 0.9 },
+        headline_supported: { type: 'noul', noul: 0.05 },
         is_ai_written: { type: 'noul', noul: 0.3 },
-        larp_role: {
-          type: 'choice',
-          choice: 'tech_visionary',
-          probabilities: { tech_visionary: 0.91, influencer: 0.05, philosopher: 0.02, real_person: 0.01, other: 0.01 },
-          confidence: 0.88,
-        },
         larp_intensity: {
           type: 'score',
           score: 3.6,
@@ -56,13 +52,14 @@ globalThis.fetch = async (url, opts) => {
         {
           message: {
             content: JSON.stringify({
-              persona_performance: 0.93,
+              work_shown: 0.05,
+              image_crafted: 0.95,
               stat_farming: 0.8,
               grandiose_claims: 0.9,
               technical_specifics: 0.05,
               headline_larp: 0.9,
+              headline_supported: 0.05,
               is_ai_written: 0.4,
-              larp_role: 'tech_visionary',
               larp_intensity: 3.5,
             }),
           },

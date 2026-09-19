@@ -12,7 +12,7 @@ import { composeVerdict, shouldShow, sponsoredVerdict, DEFAULT_SENSITIVITY } fro
 
 const STORAGE_KEYS = {
   settings: 'larp_settings',
-  cache: 'larp_verdict_cache',
+  cache: 'larp_verdict_cache', // kept in sync with VERDICT_CACHE_ROOT below
 };
 
 const DEFAULT_SETTINGS = {
@@ -27,6 +27,10 @@ const DEFAULT_SETTINGS = {
 
 const CACHE_LIMIT = 2000;
 const CONCURRENCY = 3;
+
+/** Bump when the question set changes; invalidates the verdict cache. */
+const TAX_VERSION = 'tax-2';
+const VERDICT_CACHE_ROOT = 'larp_verdict_cache';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -64,7 +68,10 @@ function fnv1a(str) {
 }
 
 function cacheKey({ post_text, author_headline }) {
-  return fnv1a(`${author_headline || ''}\u0000${post_text || ''}`);
+  // TAX_VERSION rejects verdicts cached under an older question set — the
+  // composer requires the new nouls and old answers fail the missing-noul
+  // check, which would silently disable badges for every cached post.
+  return `${TAX_VERSION}-${fnv1a(`${author_headline || ''}\u0000${post_text || ''}`)}`;
 }
 
 async function ensureCacheLoaded() {
