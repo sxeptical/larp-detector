@@ -248,8 +248,9 @@
   const RE_FOLLOW_LINE = /^[•·]?\s*(follow|following|connect|\+)$/i;
   const RE_SOCIAL_LINE = /(likes|liked|reposted|commented on|celebrates) this|and \d+ others/i;
   // Our own badge renders inside the card and pollutes innerText — filter it.
-  // The pill is inline-flex, so it appears as ONE line: "INFLUENCER | 33%".
-  const RE_BADGE_LABEL = /^(real one|philosopher|10x engineer|influencer|martyr|bait|ai slop|sponsored|larp)(\s*[|·]?\s*\d{1,3}%)?$/i;
+  // The pill is inline-flex, so it appears as ONE line: "LARP | 33%".
+  // Legacy role labels are kept so stale-build badges in test pages don't leak.
+  const RE_BADGE_LABEL = /^(real( one)?|larp|sponsored|philosopher|10x engineer|influencer|martyr|bait|ai slop)(\s*[|·]?\s*\d{1,3}%)?$/i;
   const RE_PERCENT = /^\d{1,3}%$/;
 
   function cardLines(el) {

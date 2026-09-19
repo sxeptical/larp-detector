@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LARP Detector for LinkedIn",
   "version": "0.1.0",
-  "description": "Real-time LinkedIn LARP detector. Names the persona being performed as you scroll: philosopher, 10x engineer, influencer, martyr, bait.",
+  "description": "Real-time LinkedIn LARP detector. Judges each post as it scrolls into view and marks it REAL or LARP, powered by Jev (TypeSafe System One).",
   "permissions": ["storage"],
   "host_permissions": [
     "https://api.typesafe.ai/*",

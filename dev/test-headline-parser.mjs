@@ -39,13 +39,13 @@ const CASES = [
   },
   {
     name: 'badge-polluted lines (new pill, label + pipe + pct)',
-    lines: ['INFLUENCER | 33%', 'Feed post', 'Name', '• 2nd', 'Y2 Banking & Finance Student│ Ngee Ann Poly', '1w', 'Follow', 'CHAMPIONS!'],
+    lines: ['LARP | 33%', 'Feed post', 'Name', '• 2nd', 'Y2 Banking & Finance Student│ Ngee Ann Poly', '1w', 'Follow', 'CHAMPIONS!'],
     post: 'CHAMPIONS!',
     expect: 'Y2 Banking & Finance Student│ Ngee Ann Poly',
   },
   {
     name: 'badge-polluted lines (label + pct, no pipe)',
-    lines: ['PHILOSOPHER 60%', 'Feed post', 'Suggested', 'Name', '• 3rd+', 'Venture Builder & Investor', '2d', 'Follow', 'Some post text right here.'],
+    lines: ['LARP 60%', 'Feed post', 'Suggested', 'Name', '• 3rd+', 'Venture Builder & Investor', '2d', 'Follow', 'Some post text right here.'],
     post: 'Some post text right here.',
     expect: 'Venture Builder & Investor',
   },

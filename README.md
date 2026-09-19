@@ -5,21 +5,16 @@ A Chrome extension that detects LinkedIn LARP as you scroll.
 **LARP** here means *identity performance*: playing the character of visionary
 executive, elite expert, or thought leader instead of showing real work. The
 extension judges each feed post with [Jev](https://typesafe.ai) — TypeSafe AI's
-"System One" decision model — and drops a small status pill under the post:
+"System One" decision model — and stamps it with one of two outcomes:
 
-| Badge | The character being played |
+| Badge | Meaning |
 | --- | --- |
-| `PHILOSOPHER` | Profound lessons from a lukewarm coffee |
-| `10X ENGINEER` | "Scaled to 50M users in 3 weekends" (no architecture, no receipts) |
-| `INFLUENCER` | Follower-count flexing, "grateful to announce", Top Voice |
-| `MARTYR` | 4am alarms, streaks, suffering-as-virtue |
-| `BAIT` | "Agree?", "Repost if", cliffhangers |
-| `AI SLOP` | Machine-made costume: emoji listicles, hollow inspiration |
+| `LARP` | Identity performance: persona over substance (vague wisdom, unverifiable claims, engineered bait, AI slop, grind mythology) |
+| `REAL` | Receipts on the table: concrete work, real numbers, real context (off by default) |
 | `SPONSORED` | Paid placement (detected from the page, no API call) |
-| `REAL ONE` | Receipts on the table (off by default) |
 
-Each pill looks like `• INFLUENCER | 73%` — a colored dot (red for larp, green
-for real, gold for sponsored) plus the label and confidence. Pills are pinned
+Each pill looks like `• LARP | 73%` — a colored dot (red for larp, green for
+real, gold for sponsored) plus the label and confidence. Pills are pinned
 to the top-right of each post, on the header strip, so they stay legible even
 when a post is mostly image; hover for the full probability breakdown.
 
@@ -62,12 +57,13 @@ background/service-worker.js  Holds the API key, owns the request queue
                           (concurrency 3, retry/backoff), the persistent verdict
                           cache, and all provider calls.
 lib/questions.js          The LARP taxonomy — one batched Jev request per post:
-                          the core axis (persona_performance, stat_farming), the
-                          tech-LARP composite (grandiose_claims vs
-                          technical_specifics), headline_larp, is_ai_written,
-                          the larp_role choice, and the larp_intensity scale.
-lib/verdict.js            Composes answers into a badge. Owns the costume-gap
-                          math: grandiose × (1 − specifics). Thresholds live here.
+                          signal nouls (persona_performance, stat_farming, the
+                          tech-LARP composite grandiose_claims vs
+                          technical_specifics, headline_larp, is_ai_written)
+                          plus the larp_intensity scale. Two outcomes.
+lib/verdict.js            Composes answers into a REAL/LARP badge. Owns the
+                          costume-gap math: grandiose × (1 − specifics).
+                          Thresholds live here.
 lib/heuristics.js         Regex fallback + mock mode. Same answer shape as Jev.
 lib/jev-client.js         Provider adapter: typesafe (Jev direct) /
                           openrouter (Jev via OpenRouter's alpha Decisions
@@ -128,7 +124,7 @@ browser-control execute --session <id> --file dev/linkedin-sweep.js
 ```
 
 Edit the `SAMPLES` array in `dev/preview.mjs` — when you pre-label real feed
-posts, label **the role being played**, not just larpy/not-larpy.
+posts, label **LARP or REAL**, not degrees of cringe.
 
 Regenerate icons after editing the crab:
 
