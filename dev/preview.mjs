@@ -82,6 +82,24 @@ const SAMPLES = [
       "PSA: if you're on Postgres 15, check your autovacuum settings before any large backfill. We hit table bloat that took a weekend to unwind. Happy to share the playbook in comments.",
     author_headline: 'Database consultant',
   },
+  {
+    label: 'fake parable',
+    post_text:
+      "A junior developer once asked me how to get promoted faster.\n\nI told him to stop asking questions and start writing his own ticket.\n\nSix months later he was running the team. And then everyone clapped.\n\nBelieve in people. That's it. That's the lesson.",
+    author_headline: 'Leadership Coach',
+  },
+  {
+    label: 'virtue signal',
+    post_text:
+      "Today the young waitress spilled soup on my laptop. Instead of getting angry, I paid for her dinner, covered her rent, and told her to dream bigger.\n\nShe cried. Her mother texted me to say I restored her faith in humanity.\n\nBe kind. It costs nothing.",
+    author_headline: 'CEO | Angel Investor | Human',
+  },
+  {
+    label: 'quote repost',
+    post_text:
+      "\"You don't climb the ladder of success alone.\" — Naval\n\nRead that again.\n\nPowerful. Credit: @naval. Follow for more wisdom.\n\nAgree?",
+    author_headline: 'Growth Mindset Mentor | Curator',
+  },
 ];
 
 function pct(x) {
