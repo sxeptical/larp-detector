@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LARP Detector — Options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>🦀 LARP Detector <span>options</span></h1>
+
+      <section class="card">
+        <h2>Provider &amp; key</h2>
+        <p class="muted">
+          Jev (TypeSafe's System One model) makes the judgments. Get access at
+          <a href="https://typesafe.ai" target="_blank" rel="noreferrer">typesafe.ai</a> —
+          waitlist clears in about a day. OpenRouter has a placeholder listing for
+          <code>typesafe/jev-1.13</code> but does not serve it through the API yet.
+        </p>
+
+        <div class="field">
+          <label for="provider">Provider</label>
+          <select id="provider">
+            <option value="typesafe">TypeSafe (direct API)</option>
+            <option value="openrouter">OpenRouter (not live yet)</option>
+            <option value="mock">Mock (heuristics, no API — for development)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="apiKey">TypeSafe API key</label>
+          <div class="keyrow">
+            <input type="password" id="apiKey" placeholder="ts_..." autocomplete="off" spellcheck="false" />
+            <button id="reveal" class="btn btn--quiet" type="button">show</button>
+          </div>
+          <p class="muted">Stored in <code>chrome.storage.local</code> and used only by the extension's service worker. Never exposed to LinkedIn's page.</p>
+        </div>
+
+        <div class="field">
+          <label for="model">Model</label>
+          <input type="text" id="model" placeholder="jev-latest" spellcheck="false" />
+          <p class="muted">Pin the versioned ID (e.g. <code>jev-1.13.0</code>) once you've tuned the sensitivity.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Test</h2>
+        <p class="muted">Runs the current provider against a guaranteed specimen: the 4am lukewarm-coffee parable with a Visionary headline.</p>
+        <button id="test" class="btn">Test connection</button>
+        <pre id="test-result" class="result" hidden></pre>
+      </section>
+
+      <section class="card">
+        <h2>Maintenance</h2>
+        <button id="clear" class="btn btn--quiet">Clear verdict cache</button>
+        <span id="clear-status" class="muted"></span>
+      </section>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LARP Detector</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="head">
+      <span class="head__logo">🦀</span>
+      <div>
+        <div class="head__title">LARP Detector</div>
+        <div class="head__sub">for LinkedIn</div>
+      </div>
+      <label class="switch" title="Enable / disable detection">
+        <input type="checkbox" id="enabled" />
+        <span class="switch__slider"></span>
+      </label>
+    </header>
+
+    <section class="row">
+      <div class="row__label">
+        Sensitivity
+        <span class="row__hint">show badges at intensity ≥ <b id="sensitivity-value">1.5</b></span>
+      </div>
+      <input type="range" id="sensitivity" min="0" max="4" step="0.5" value="1.5" />
+    </section>
+
+    <section class="row row--inline">
+      <label class="check">
+        <input type="checkbox" id="showGenuine" />
+        <span>Also badge the <b>✅ REAL ONE</b>s</span>
+      </label>
+    </section>
+
+    <section class="row">
+      <div class="row__label">Provider</div>
+      <select id="provider">
+        <option value="typesafe">TypeSafe (direct)</option>
+        <option value="openrouter">OpenRouter (not live yet)</option>
+        <option value="mock">Mock (heuristics, no API)</option>
+      </select>
+      <div class="status" id="key-status">key: —</div>
+    </section>
+
+    <section class="stats">
+      <div><span id="stat-cache">0</span> cached verdicts</div>
+      <div id="stat-model">model: —</div>
+    </section>
+
+    <footer class="foot">
+      <button id="options" class="btn">Options</button>
+      <button id="clear" class="btn btn--quiet">Clear cache</button>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

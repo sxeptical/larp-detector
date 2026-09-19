@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Node (dev tooling only — the extension itself has no dependencies)
+node_modules/
+npm-debug.log*
+
+# Secrets — never commit keys
+.env
+.env.*
+*.pem
+*.key
