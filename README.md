@@ -57,13 +57,16 @@ background/service-worker.js  Holds the API key, owns the request queue
                           (concurrency 3, retry/backoff), the persistent verdict
                           cache, and all provider calls.
 lib/questions.js          The LARP taxonomy — one batched Jev request per post:
-                          signal nouls (persona_performance, stat_farming, the
-                          tech-LARP composite grandiose_claims vs
-                          technical_specifics, headline_larp, is_ai_written)
-                          plus the larp_intensity scale. Two outcomes.
+                          positive-evidence nouls (work_shown, image_crafted,
+                          stat_farming, the tech-LARP composite grandiose_claims
+                          vs technical_specifics, headline_larp,
+                          headline_supported, is_ai_written) plus the
+                          larp_intensity scale. Two outcomes.
 lib/verdict.js            Composes answers into a REAL/LARP badge. Owns the
-                          costume-gap math: grandiose × (1 − specifics).
-                          Thresholds live here.
+                          gap math: image_crafted × (1 − work_shown) for the
+                          persona signal, grandiose × (1 − specifics) for
+                          tech-LARP, headline_larp × (1 − headline_supported)
+                          for the cross-field signal. Thresholds live here.
 lib/heuristics.js         Regex fallback + mock mode. Same answer shape as Jev.
 lib/jev-client.js         Provider adapter: typesafe (Jev direct) /
                           openrouter (Jev via OpenRouter's alpha Decisions
@@ -114,6 +117,12 @@ OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter-chat # through t
 node dev/smoke.mjs            # integration test: real service worker, mocked endpoints
 node dev/test-headline-parser.mjs   # headline parser vs lines sampled from the live feed
 ```
+
+6. **Bump `TAX_VERSION` in `background/service-worker.js` whenever the question
+   set changes.** The verdict cache is keyed under that version, so changing
+   wording without bumping it leaves stale verdicts that fail the composer's
+   missing-noul check. (Cache invalidation uses the same mechanism the chat
+   provider's estimate-confidence guard relies on — change one, check both.)
 
 Browser-test the content script on the real LinkedIn DOM (uses the
 Browser Control CLI; needs a logged-in LinkedIn tab attached):
