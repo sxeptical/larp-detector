@@ -52,6 +52,7 @@ const __testSettings = {
 };
 window.chrome = {
   runtime: {
+    id: 'test-shim',
     lastError: undefined,
     getURL: (p) => p,
     sendMessage: (msg, cb) => {

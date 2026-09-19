@@ -79,12 +79,63 @@
   });
 
   // -------------------------------------------------------------------------
+  // Extension-context safety
+  // -------------------------------------------------------------------------
+  /**
+   * Content scripts get orphaned when the extension is reloaded/updated while
+   * a tab stays open: chrome.runtime.sendMessage then throws "Extension context
+   * invalidated" on every call. Detect that, stop this instance cleanly, and
+   * never let it surface as an uncaught error. A page reload reconnects.
+   */
+  function contextValid() {
+    try {
+      return Boolean(chrome.runtime?.id);
+    } catch {
+      return false;
+    }
+  }
+
+  let invalidatedHandled = false;
+  function handleInvalidatedContext() {
+    if (invalidatedHandled) return;
+    invalidatedHandled = true;
+    window.__larpTeardown?.();
+    window.__larpDetectorLoaded = false;
+    console.debug('[LARP] extension context invalidated — stopping. Reload the tab to reconnect.');
+  }
+
+  /** sendMessage that never throws; returns false when the context is gone. */
+  function safeSendMessage(message, callback) {
+    if (!contextValid()) {
+      handleInvalidatedContext();
+      return false;
+    }
+    try {
+      chrome.runtime.sendMessage(message, (res) => {
+        try {
+          callback(chrome.runtime.lastError ? null : res);
+        } catch {
+          callback(null);
+        }
+      });
+      return true;
+    } catch {
+      handleInvalidatedContext();
+      return false;
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Boot
   // -------------------------------------------------------------------------
   init();
 
   async function init() {
     settings = await getSettings();
+    if (!contextValid()) {
+      handleInvalidatedContext();
+      return;
+    }
     setupIntersectionObserver();
     setupMutationObserver();
     patchHistory();
@@ -104,14 +155,12 @@
   }
 
   function getSettings() {
+    const defaults = { enabled: true, showGenuine: false, sensitivity: 1.5 };
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }, (res) => {
-        if (chrome.runtime.lastError || !res?.ok) {
-          resolve({ enabled: true, showGenuine: false, sensitivity: 1.5 });
-        } else {
-          resolve(res.settings);
-        }
+      const sent = safeSendMessage({ type: 'GET_SETTINGS' }, (res) => {
+        resolve(res?.ok ? res.settings : defaults);
       });
+      if (!sent) resolve(defaults);
     });
   }
 
@@ -373,9 +422,9 @@
     debug.analyzed++;
     showAnalyzing(el, urn);
 
-    chrome.runtime.sendMessage({ type: 'ANALYZE_POST', post }, (res) => {
+    const sent = safeSendMessage({ type: 'ANALYZE_POST', post }, (res) => {
       removeBadge(el, urn, 'analyzing');
-      if (chrome.runtime.lastError || !res?.ok) {
+      if (!res?.ok) {
         analyzeLocally(el, urn, post); // service worker unreachable → heuristics
         return;
       }
@@ -390,10 +439,15 @@
       }
       applyVerdict(el, urn, res.verdict, res.show, { store: true, textKey });
     });
+    if (!sent) removeBadge(el, urn, 'analyzing');
   }
 
   /** Offline path: dynamic-import the heuristics + composer from the extension bundle. */
   async function analyzeLocally(el, urn, post) {
+    if (!contextValid()) {
+      handleInvalidatedContext();
+      return;
+    }
     try {
       if (!localAnalyzerPromise) {
         localAnalyzerPromise = Promise.all([
