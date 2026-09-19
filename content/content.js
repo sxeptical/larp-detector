@@ -455,57 +455,15 @@
   }
 
   /**
-   * Place the pill under the post text (like a status chip), left-aligned.
-   * LinkedIn's wrappers are flex containers in unpredictable places, so in-flow
-   * insertion lands in odd spots depending on the card template. Rect math is
-   * deterministic across templates.
-   *
-   * Virtualized cards are sometimes analyzed before they have layout (rects of
-   * zero size), which would pin the pill far outside the card. In that case we
-   * re-measure on the next frame and fall back to the corner pill if the card
-   * still has no usable geometry.
+   * Place the badge at the top-right of the post card — over the header strip,
+   * which always has the card's own background (never an image), so the pill
+   * stays legible on media-heavy posts. The 44px offset clears LinkedIn's
+   * "…" menu and the Suggested dismiss button.
    */
-  function placeCorner(el, badge) {
-    el.classList.add('larp-post-anchor');
-    badge.classList.add('larp-badge--floating');
-    badge.dataset.anchor = 'corner';
-    el.appendChild(badge);
-  }
-
   function insertBadge(el, badge) {
-    const textSelector = SELECTORS.text.join(', ');
-    const textEl = el.querySelector(textSelector);
-    if (!textEl || !el.contains(textEl)) {
-      placeCorner(el, badge);
-      return;
-    }
-
-    const measure = () => {
-      const cardRect = el.getBoundingClientRect();
-      const textRect = textEl.getBoundingClientRect();
-      return {
-        hasLayout: Boolean((textRect.width || textRect.height) && (cardRect.width || cardRect.height)),
-        top: Math.round(textRect.bottom - cardRect.top + 8),
-        left: Math.round(textRect.left - cardRect.left),
-      };
-    };
-
-    const place = () => {
-      const { hasLayout, top, left } = measure();
-      if (!hasLayout || top < 0 || left < -2) return false;
-      el.classList.add('larp-post-anchor');
-      badge.classList.add('larp-badge--anchored');
-      badge.dataset.anchor = 'rect';
-      badge.style.top = `${top}px`;
-      badge.style.left = `${Math.max(0, left)}px`;
-      el.appendChild(badge);
-      return true;
-    };
-
-    if (place()) return;
-    requestAnimationFrame(() => {
-      if (!place()) placeCorner(el, badge);
-    });
+    el.classList.add('larp-post-anchor');
+    badge.dataset.anchor = 'top-right';
+    el.appendChild(badge);
   }
 
   function showAnalyzing(el, urn) {

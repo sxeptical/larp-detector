@@ -19,9 +19,9 @@ extension judges each feed post with [Jev](https://typesafe.ai) — TypeSafe AI'
 | `REAL ONE` | Receipts on the table (off by default) |
 
 Each pill looks like `• INFLUENCER | 73%` — a colored dot (red for larp, green
-for real, gold for sponsored) plus the label and confidence. Pills appear under
-the post text and stay there while you scroll; hover for the full probability
-breakdown.
+for real, gold for sponsored) plus the label and confidence. Pills are pinned
+to the top-right of each post, on the header strip, so they stay legible even
+when a post is mostly image; hover for the full probability breakdown.
 
 ## Install
 
@@ -90,9 +90,10 @@ Design decisions worth knowing:
 - **Headlines are parsed from card text lines** — the current UI has no stable
   selector for the actor subtitle. `dev/test-headline-parser.mjs` tests the real
   parser against line arrays sampled from the live feed.
-- **Badges are status pills under the post text.** No emoji, no animations for
-  now — they render once and stay while you scroll (the rect anchor keeps them
-  under the text across LinkedIn's card templates).
+- **Badges are status pills pinned to the top-right of the post header.** No
+  emoji, no animations for now — they render once and stay while you scroll.
+  The 96px right-offset keeps them clear of LinkedIn's own dismiss/menu/Follow
+  buttons (see the measurements in `content/content.css`).
 - **The key never touches the page.** It lives in `chrome.storage.local` and is
   only read by the service worker.
 
