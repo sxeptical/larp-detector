@@ -24,11 +24,14 @@ async function refresh() {
     $('showGenuine').checked = Boolean(settings.showGenuine);
     $('provider').value = settings.provider;
     const keyEl = $('key-status');
-    if (settings.apiKey) {
+    const providerKey =
+      settings.provider === 'openrouter' ? settings.openrouterApiKey : settings.apiKey;
+    if (providerKey) {
       keyEl.textContent = 'key: set ✓';
       keyEl.className = 'status status--ok';
     } else {
-      keyEl.textContent = settings.provider === 'mock' ? 'no key needed in mock mode' : 'key: not set — add it in Options';
+      keyEl.textContent =
+        settings.provider === 'mock' ? 'no key needed in mock mode' : 'key: not set — add it in Options';
       keyEl.className = settings.provider === 'mock' ? 'status' : 'status status--bad';
     }
   }

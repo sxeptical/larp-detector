@@ -30,10 +30,18 @@ extension judges each feed post with [Jev](https://typesafe.ai) — TypeSafe AI'
 No key yet? Set provider to **Mock** — the heuristics engine runs the whole
 pipeline offline so you can develop and demo without the API.
 
-> OpenRouter has a placeholder listing for `typesafe/jev-1.13` but does **not**
-> serve it through the API yet (verified Sep 19, 2026 against `/api/v1/models`).
-> The provider adapter is pre-wired; when it goes live, switching is a dropdown
-> change in Options.
+## Providers
+
+- **TypeSafe — Jev direct (recommended).** Jev itself: ~100ms per post,
+  $0.042/M input tokens, output free.
+- **OpenRouter — emulation.** Jev is *not* served by OpenRouter yet (placeholder
+  listing only; verified Sep 19, 2026 against `/api/v1/models`). Instead, a
+  cheap chat model (default `deepseek/deepseek-v4-flash` — $0.042/M input) answers
+  the **exact same question set** in structured JSON via `response_format`, mapped
+  back into Jev's answer shape. Slower (1–3s per post) and output tokens are
+  billed, but it runs on an OpenRouter key you already have. Any
+  structured-output chat model works — set it in Options.
+- **Mock.** Heuristics, no network — for development and demos.
 
 ## How it works
 
@@ -51,8 +59,11 @@ lib/questions.js          The LARP taxonomy — one batched Jev request per post
 lib/verdict.js            Composes answers into a badge. Owns the costume-gap
                           math: grandiose × (1 − specifics). Thresholds live here.
 lib/heuristics.js         Regex fallback + mock mode. Same answer shape as Jev.
-lib/jev-client.js         Provider adapter: typesafe (live) / openrouter (stub)
-                          / mock. Retries 429/529 with backoff, 8s timeout.
+lib/jev-client.js         Provider adapter: typesafe (Jev direct) /
+                          openrouter (chat-model emulation with JSON-schema
+                          structured output) / mock. Retries 429/529 with
+                          backoff; guards against model IDs leaking across
+                          providers.
 ui/                       Popup (toggle, sensitivity slider) and Options
                           (key, provider, Test connection, clear cache).
 ```
@@ -85,7 +96,8 @@ Design decisions worth knowing:
 
 ```bash
 node dev/preview.mjs          # heuristics only, no key needed
-TYPESAFE_API_KEY=... node dev/preview.mjs --live   # run samples through real Jev
+TYPESAFE_API_KEY=... node dev/preview.mjs --live                  # through real Jev
+OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter   # through OpenRouter
 node dev/smoke.mjs            # integration test: real service worker, mocked chrome API
 ```
 

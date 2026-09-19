@@ -7,6 +7,42 @@
 
 let messageHandler = null;
 
+// Mock upstream OpenRouter before the service worker imports so we can test
+// the emulation provider without network access.
+const openrouterCalls = [];
+globalThis.fetch = async (url, opts) => {
+  if (String(url).includes('openrouter.ai')) {
+    openrouterCalls.push(JSON.parse(opts.body));
+    const payload = {
+      id: 'gen-smoke',
+      model: 'deepseek/deepseek-v4-flash',
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              persona_performance: 0.93,
+              stat_farming: 0.8,
+              grandiose_claims: 0.9,
+              technical_specifics: 0.05,
+              headline_larp: 0.9,
+              is_ai_written: 0.4,
+              larp_role: 'tech_visionary',
+              role_confidence: 0.88,
+              larp_intensity: 3.5,
+            }),
+          },
+        },
+      ],
+      usage: { prompt_tokens: 500, completion_tokens: 90 },
+    };
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  throw new Error(`unexpected fetch in smoke test: ${url}`);
+};
+
 const store = new Map();
 
 globalThis.chrome = {
@@ -121,6 +157,28 @@ check('CLEAR_CACHE empties the cache', res.ok && after.stats.cacheSize === 0);
 // 8. Test-provider message
 res = await call({ type: 'TEST_PROVIDER' });
 check('TEST_PROVIDER returns a verdict preview', res.ok && Boolean(res.verdict), res.verdict?.label);
+
+// 9. OpenRouter emulation provider (mocked fetch)
+const OPENROUTER_POST = {
+  urn: 'urn:li:activity:9',
+  post_text:
+    'We processed 2 billion events and hit 50M users in three weekends. Our AI platform is unstoppable. The vision is everything.',
+  author_headline: 'Visionary | Disruptor | Keynote Speaker',
+  isPromoted: false,
+};
+
+await call({ type: 'SET_SETTINGS', patch: { provider: 'openrouter', openrouterApiKey: 'sk-or-test', model: '' } });
+res = await call({ type: 'ANALYZE_POST', post: OPENROUTER_POST });
+check('OpenRouter provider returns a composed verdict', res.ok && res.verdict?.role === 'tech_visionary', `${res.verdict?.emoji} ${res.verdict?.label} ${res.verdict?.pct}%`);
+check('mapped confidence becomes the badge pct', res.verdict?.pct === 94, `pct=${res.verdict?.pct}`);
+check('request used the OpenRouter default model', openrouterCalls[0]?.model === 'deepseek/deepseek-v4-flash', openrouterCalls[0]?.model);
+check('request used json_schema response format', openrouterCalls[0]?.response_format?.type === 'json_schema');
+check('request body includes every taxonomy question in the prompt', String(openrouterCalls[0]?.messages?.[0]?.content).includes('larp_role'));
+
+// Model leak guard: a typesafe model id must not be sent to OpenRouter
+await call({ type: 'SET_SETTINGS', patch: { provider: 'openrouter', openrouterApiKey: 'sk-or-test', model: 'jev-latest' } });
+const leaked = await call({ type: 'ANALYZE_POST', post: { ...OPENROUTER_POST, post_text: OPENROUTER_POST.post_text + ' More.' } });
+check('typesafe model id falls back to the OpenRouter default', openrouterCalls[1]?.model === 'deepseek/deepseek-v4-flash', openrouterCalls[1]?.model);
 
 console.log(failures === 0 ? '\nAll smoke tests passed.' : `\n${failures} smoke test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

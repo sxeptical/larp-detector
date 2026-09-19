@@ -14,11 +14,16 @@ import { composeVerdict, shouldShow } from '../lib/verdict.js';
 import { callJev } from '../lib/jev-client.js';
 
 const LIVE = process.argv.includes('--live');
+const USE_OPENROUTER = process.argv.includes('--openrouter');
 const settings = {
-  provider: 'typesafe',
+  provider: USE_OPENROUTER ? 'openrouter' : 'typesafe',
   apiKey: process.env.TYPESAFE_API_KEY || '',
-  model: 'jev-latest',
+  openrouterApiKey: process.env.OPENROUTER_API_KEY || '',
+  model: process.env.MODEL || '',
 };
+const hasLiveKey = USE_OPENROUTER
+  ? Boolean(settings.openrouterApiKey)
+  : Boolean(settings.apiKey);
 
 const SAMPLES = [
   {
@@ -82,7 +87,7 @@ function pct(x) {
 }
 
 async function runSample(sample) {
-  if (LIVE && settings.apiKey) {
+  if (LIVE && hasLiveKey) {
     try {
       const result = await callJev(
         { post_text: sample.post_text, author_headline: sample.author_headline },
@@ -118,5 +123,14 @@ for (const sample of SAMPLES) {
 }
 
 console.log(`\n${SAMPLES.length} samples, ${mismatches} unparseable.`);
-if (LIVE && settings.apiKey) console.log('Ran against the live Jev API.');
-else console.log('Ran heuristics only. Set TYPESAFE_API_KEY and pass --live to use Jev.');
+if (LIVE && hasLiveKey) {
+  console.log(
+    USE_OPENROUTER
+      ? `Ran against OpenRouter (${settings.model || 'provider default'}).`
+      : 'Ran against the live Jev API.'
+  );
+} else {
+  console.log(
+    'Ran heuristics only. Set TYPESAFE_API_KEY and pass --live (or OPENROUTER_API_KEY with --openrouter --live) to use a real model.'
+  );
+}

@@ -6,7 +6,7 @@
  * DOM work and talks to this worker via runtime messages.
  */
 
-import { callJev } from '../lib/jev-client.js';
+import { callJev, providerApiKey } from '../lib/jev-client.js';
 import { analyzeHeuristically } from '../lib/heuristics.js';
 import { composeVerdict, shouldShow, sponsoredVerdict, DEFAULT_SENSITIVITY } from '../lib/verdict.js';
 
@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS = {
   showGenuine: false,
   provider: 'typesafe',
   apiKey: '',
+  openrouterApiKey: '',
   model: 'jev-latest',
 };
 
@@ -135,7 +136,7 @@ const stats = {
 
 async function analyzeRaw(post) {
   // Provider chosen in settings; heuristics double as mock mode and fallback.
-  if (settings.provider === 'mock' || !settings.apiKey) {
+  if (settings.provider === 'mock' || !providerApiKey(settings)) {
     const result = analyzeHeuristically(post);
     if (!result) return null;
     return { ...result, source: 'heuristic' };
@@ -245,7 +246,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           stats: {
             ...stats,
             cacheSize: cache.size,
-            settings: { ...settings, apiKey: settings.apiKey ? '(set)' : '' },
+            settings: {
+              ...settings,
+              apiKey: settings.apiKey ? '(set)' : '',
+              openrouterApiKey: settings.openrouterApiKey ? '(set)' : '',
+            },
           },
         });
         break;
