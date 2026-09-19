@@ -584,7 +584,9 @@
       sep.textContent = '|';
       const pct = document.createElement('span');
       pct.className = 'larp-badge__pct';
-      pct.textContent = `${verdict.pct}%`;
+      // Estimated pcts (no probability distribution) get a ~ prefix so the
+      // badge itself shows the confidence is a guess, not a Jev probability.
+      pct.textContent = `${verdict.estimated ? '~' : ''}${verdict.pct}%`;
       badge.append(sep, pct);
     }
 
