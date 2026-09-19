@@ -14,14 +14,16 @@ import { composeVerdict, shouldShow } from '../lib/verdict.js';
 import { callJev } from '../lib/jev-client.js';
 
 const LIVE = process.argv.includes('--live');
-const USE_OPENROUTER = process.argv.includes('--openrouter');
+const USE_OPENROUTER_CHAT = process.argv.includes('--openrouter-chat');
+const USE_OPENROUTER = !USE_OPENROUTER_CHAT && process.argv.includes('--openrouter');
+const PROVIDER = USE_OPENROUTER_CHAT ? 'openrouter-chat' : USE_OPENROUTER ? 'openrouter' : 'typesafe';
 const settings = {
-  provider: USE_OPENROUTER ? 'openrouter' : 'typesafe',
+  provider: PROVIDER,
   apiKey: process.env.TYPESAFE_API_KEY || '',
   openrouterApiKey: process.env.OPENROUTER_API_KEY || '',
   model: process.env.MODEL || '',
 };
-const hasLiveKey = USE_OPENROUTER
+const hasLiveKey = PROVIDER.startsWith('openrouter')
   ? Boolean(settings.openrouterApiKey)
   : Boolean(settings.apiKey);
 
@@ -124,13 +126,9 @@ for (const sample of SAMPLES) {
 
 console.log(`\n${SAMPLES.length} samples, ${mismatches} unparseable.`);
 if (LIVE && hasLiveKey) {
-  console.log(
-    USE_OPENROUTER
-      ? `Ran against OpenRouter (${settings.model || 'provider default'}).`
-      : 'Ran against the live Jev API.'
-  );
+  console.log(`Ran against provider: ${PROVIDER}${settings.model ? ` (${settings.model})` : ''}.`);
 } else {
   console.log(
-    'Ran heuristics only. Set TYPESAFE_API_KEY and pass --live (or OPENROUTER_API_KEY with --openrouter --live) to use a real model.'
+    'Ran heuristics only. Pass --live with TYPESAFE_API_KEY (or OPENROUTER_API_KEY plus --openrouter / --openrouter-chat) to use a real model.'
   );
 }

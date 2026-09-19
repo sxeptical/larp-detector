@@ -34,13 +34,15 @@ pipeline offline so you can develop and demo without the API.
 
 - **TypeSafe — Jev direct (recommended).** Jev itself: ~100ms per post,
   $0.042/M input tokens, output free.
-- **OpenRouter — emulation.** Jev is *not* served by OpenRouter yet (placeholder
-  listing only; verified Sep 19, 2026 against `/api/v1/models`). Instead, a
-  cheap chat model (default `deepseek/deepseek-v4-flash` — $0.042/M input) answers
-  the **exact same question set** in structured JSON via `response_format`, mapped
-  back into Jev's answer shape. Slower (1–3s per post) and output tokens are
-  billed, but it runs on an OpenRouter key you already have. Any
-  structured-output chat model works — set it in Options.
+- **OpenRouter — Jev via the alpha Decisions API.** Same model, same pricing,
+  on an OpenRouter key. Jev does *not* speak the OpenAI-compatible chat
+  endpoint — it only answers on the dedicated Decisions router
+  (`POST /api/alpha/decisions`, request shape `{model, state, questions}`, same
+  answers back), verified Sep 19, 2026. Alpha: may require access on your account.
+- **OpenRouter — chat-model estimate.** Fallback for keys without Decisions
+  access: a cheap structured-output chat model (default
+  `deepseek/deepseek-v4-flash`) answers the same question set in JSON. Slower
+  (1–3s per post) and output tokens are billed.
 - **Mock.** Heuristics, no network — for development and demos.
 
 ## How it works
@@ -60,10 +62,10 @@ lib/verdict.js            Composes answers into a badge. Owns the costume-gap
                           math: grandiose × (1 − specifics). Thresholds live here.
 lib/heuristics.js         Regex fallback + mock mode. Same answer shape as Jev.
 lib/jev-client.js         Provider adapter: typesafe (Jev direct) /
-                          openrouter (chat-model emulation with JSON-schema
-                          structured output) / mock. Retries 429/529 with
-                          backoff; guards against model IDs leaking across
-                          providers.
+                          openrouter (Jev via OpenRouter's alpha Decisions
+                          API) / openrouter-chat (structured-output chat-model
+                          estimate) / mock. Retries 429/529 with backoff; guards
+                          against model IDs leaking across providers.
 ui/                       Popup (toggle, sensitivity slider) and Options
                           (key, provider, Test connection, clear cache).
 ```
@@ -96,9 +98,10 @@ Design decisions worth knowing:
 
 ```bash
 node dev/preview.mjs          # heuristics only, no key needed
-TYPESAFE_API_KEY=... node dev/preview.mjs --live                  # through real Jev
-OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter   # through OpenRouter
-node dev/smoke.mjs            # integration test: real service worker, mocked chrome API
+TYPESAFE_API_KEY=... node dev/preview.mjs --live                    # through real Jev (direct)
+OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter     # through Jev via OpenRouter Decisions
+OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter-chat # through the chat-model estimate
+node dev/smoke.mjs            # integration test: real service worker, mocked endpoints
 ```
 
 Edit the `SAMPLES` array in `dev/preview.mjs` — when you pre-label real feed

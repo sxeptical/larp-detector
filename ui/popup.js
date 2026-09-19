@@ -24,8 +24,9 @@ async function refresh() {
     $('showGenuine').checked = Boolean(settings.showGenuine);
     $('provider').value = settings.provider;
     const keyEl = $('key-status');
-    const providerKey =
-      settings.provider === 'openrouter' ? settings.openrouterApiKey : settings.apiKey;
+    const providerKey = settings.provider.startsWith('openrouter')
+      ? settings.openrouterApiKey
+      : settings.apiKey;
     if (providerKey) {
       keyEl.textContent = 'key: set ✓';
       keyEl.className = 'status status--ok';

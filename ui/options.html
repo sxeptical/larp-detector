@@ -14,17 +14,18 @@
         <p class="muted">
           <b>TypeSafe</b> runs Jev itself — fastest and cheapest
           (<a href="https://typesafe.ai" target="_blank" rel="noreferrer">typesafe.ai</a>,
-          waitlist clears in about a day). <b>OpenRouter</b> does not serve Jev yet
-          (placeholder listing only), so it instead has a cheap chat model answer the
-          exact same question set in structured JSON — slower and pricier, but works
-          with a key you already have.
+          waitlist clears in about a day). <b>OpenRouter</b> also serves Jev now, via its
+          alpha <i>Decisions API</i> — same model, same price, your OpenRouter key.
+          The chat-model estimate is a fallback for OpenRouter keys without
+          Decisions access.
         </p>
 
         <div class="field">
           <label for="provider">Provider</label>
           <select id="provider">
             <option value="typesafe">TypeSafe — Jev direct (recommended)</option>
-            <option value="openrouter">OpenRouter — chat-model emulation</option>
+            <option value="openrouter">OpenRouter — Jev via Decisions API (alpha)</option>
+            <option value="openrouter-chat">OpenRouter — chat-model estimate</option>
             <option value="mock">Mock — heuristics, no API (development)</option>
           </select>
         </div>
@@ -44,7 +45,7 @@
             <input type="password" id="openrouterApiKey" placeholder="sk-or-..." autocomplete="off" spellcheck="false" />
             <button class="btn btn--quiet reveal" type="button" data-target="openrouterApiKey">show</button>
           </div>
-          <p class="muted">Used to run the question set through a chat model (default <code>deepseek/deepseek-v4-flash</code>, ~$0.04/M tokens). Jev itself is not served by OpenRouter yet — this emulates its answers.</p>
+          <p class="muted">Used for both OpenRouter providers. <b>Jev via Decisions API</b> (default <code>typesafe/jev-1.13</code>) is the real model at the same $0.042/M pricing — alpha, so it may require access on your account. The <b>chat-model estimate</b> runs the question set through a structured-output chat model instead (default <code>deepseek/deepseek-v4-flash</code>).</p>
         </div>
 
         <div class="field">

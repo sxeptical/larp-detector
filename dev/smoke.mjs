@@ -8,12 +8,48 @@
 let messageHandler = null;
 
 // Mock upstream OpenRouter before the service worker imports so we can test
-// the emulation provider without network access.
-const openrouterCalls = [];
+// both OpenRouter providers without network access.
+const chatCalls = [];
+const decisionsCalls = [];
+
+const jsonResponse = (payload, status = 200) =>
+  new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } });
+
 globalThis.fetch = async (url, opts) => {
-  if (String(url).includes('openrouter.ai')) {
-    openrouterCalls.push(JSON.parse(opts.body));
-    const payload = {
+  const u = String(url);
+
+  if (u.includes('/api/alpha/decisions')) {
+    decisionsCalls.push(JSON.parse(opts.body));
+    return jsonResponse({
+      id: 'gen-smoke-decisions',
+      model: 'typesafe/jev-1.13-20260917',
+      answers: {
+        persona_performance: { type: 'noul', noul: 0.97 },
+        stat_farming: { type: 'noul', noul: 0.85 },
+        grandiose_claims: { type: 'noul', noul: 0.95 },
+        technical_specifics: { type: 'noul', noul: 0.02 },
+        headline_larp: { type: 'noul', noul: 0.9 },
+        is_ai_written: { type: 'noul', noul: 0.3 },
+        larp_role: {
+          type: 'choice',
+          choice: 'tech_visionary',
+          probabilities: { tech_visionary: 0.91, influencer: 0.05, philosopher: 0.02, real_person: 0.01, other: 0.01 },
+          confidence: 0.88,
+        },
+        larp_intensity: {
+          type: 'score',
+          score: 3.6,
+          probabilities: { 0: 0, 1: 0.05, 2: 0.1, 3: 0.5, 4: 0.35 },
+          confidence: 0.8,
+        },
+      },
+      usage: { input_tokens: 420, output_tokens: 30 },
+    });
+  }
+
+  if (u.includes('/api/v1/chat/completions')) {
+    chatCalls.push(JSON.parse(opts.body));
+    return jsonResponse({
       id: 'gen-smoke',
       model: 'deepseek/deepseek-v4-flash',
       choices: [
@@ -34,12 +70,9 @@ globalThis.fetch = async (url, opts) => {
         },
       ],
       usage: { prompt_tokens: 500, completion_tokens: 90 },
-    };
-    return new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
     });
   }
+
   throw new Error(`unexpected fetch in smoke test: ${url}`);
 };
 
@@ -158,8 +191,8 @@ check('CLEAR_CACHE empties the cache', res.ok && after.stats.cacheSize === 0);
 res = await call({ type: 'TEST_PROVIDER' });
 check('TEST_PROVIDER returns a verdict preview', res.ok && Boolean(res.verdict), res.verdict?.label);
 
-// 9. OpenRouter emulation provider (mocked fetch)
-const OPENROUTER_POST = {
+// 9. OpenRouter — Jev via the alpha Decisions API (mocked fetch)
+const DECISIONS_POST = {
   urn: 'urn:li:activity:9',
   post_text:
     'We processed 2 billion events and hit 50M users in three weekends. Our AI platform is unstoppable. The vision is everything.',
@@ -168,17 +201,33 @@ const OPENROUTER_POST = {
 };
 
 await call({ type: 'SET_SETTINGS', patch: { provider: 'openrouter', openrouterApiKey: 'sk-or-test', model: '' } });
-res = await call({ type: 'ANALYZE_POST', post: OPENROUTER_POST });
-check('OpenRouter provider returns a composed verdict', res.ok && res.verdict?.role === 'tech_visionary', `${res.verdict?.emoji} ${res.verdict?.label} ${res.verdict?.pct}%`);
-check('mapped confidence becomes the badge pct', res.verdict?.pct === 94, `pct=${res.verdict?.pct}`);
-check('request used the OpenRouter default model', openrouterCalls[0]?.model === 'deepseek/deepseek-v4-flash', openrouterCalls[0]?.model);
-check('request used json_schema response format', openrouterCalls[0]?.response_format?.type === 'json_schema');
-check('request body includes every taxonomy question in the prompt', String(openrouterCalls[0]?.messages?.[0]?.content).includes('larp_role'));
+res = await call({ type: 'ANALYZE_POST', post: DECISIONS_POST });
+check('Decisions API returns a composed verdict', res.ok && res.verdict?.role === 'tech_visionary', `${res.verdict?.emoji} ${res.verdict?.label} ${res.verdict?.pct}%`);
+check('Decisions request went to /api/alpha/decisions', decisionsCalls.length === 1);
+check('Decisions request used typesafe/jev-1.13 by default', decisionsCalls[0]?.model === 'typesafe/jev-1.13', decisionsCalls[0]?.model);
+check('Decisions request carries state and the full question set', Boolean(decisionsCalls[0]?.state?.post_text) && Boolean(decisionsCalls[0]?.questions?.larp_role));
+check('Decisions verdict keeps Jev-native confidence', res.verdict?.pct >= 90, `pct=${res.verdict?.pct}`);
 
-// Model leak guard: a typesafe model id must not be sent to OpenRouter
+// Model leak guard: a chat-style model id must not be sent to the Decisions router
 await call({ type: 'SET_SETTINGS', patch: { provider: 'openrouter', openrouterApiKey: 'sk-or-test', model: 'jev-latest' } });
-const leaked = await call({ type: 'ANALYZE_POST', post: { ...OPENROUTER_POST, post_text: OPENROUTER_POST.post_text + ' More.' } });
-check('typesafe model id falls back to the OpenRouter default', openrouterCalls[1]?.model === 'deepseek/deepseek-v4-flash', openrouterCalls[1]?.model);
+await call({ type: 'ANALYZE_POST', post: { ...DECISIONS_POST, post_text: DECISIONS_POST.post_text + ' More.' } });
+check('slash-less model id falls back to typesafe/jev-1.13', decisionsCalls[1]?.model === 'typesafe/jev-1.13', decisionsCalls[1]?.model);
+
+// 10. OpenRouter — chat-model estimate provider (mocked fetch)
+const CHAT_POST = {
+  urn: 'urn:li:activity:10',
+  post_text:
+    'We processed 2 billion events and hit 50M users in three weekends. AI platform unstoppable. The vision is everything, always.',
+  author_headline: 'Visionary | Disruptor | Keynote Speaker',
+  isPromoted: false,
+};
+
+await call({ type: 'SET_SETTINGS', patch: { provider: 'openrouter-chat', openrouterApiKey: 'sk-or-test', model: '' } });
+res = await call({ type: 'ANALYZE_POST', post: CHAT_POST });
+check('chat estimate returns a composed verdict', res.ok && res.verdict?.role === 'tech_visionary', `${res.verdict?.emoji} ${res.verdict?.label} ${res.verdict?.pct}%`);
+check('chat request used the chat default model', chatCalls[0]?.model === 'deepseek/deepseek-v4-flash', chatCalls[0]?.model);
+check('chat request used json_schema response format', chatCalls[0]?.response_format?.type === 'json_schema');
+check('chat request includes every taxonomy question in the prompt', String(chatCalls[0]?.messages?.[0]?.content).includes('larp_role'));
 
 console.log(failures === 0 ? '\nAll smoke tests passed.' : `\n${failures} smoke test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

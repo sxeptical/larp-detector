@@ -4,7 +4,8 @@ const $ = (id) => document.getElementById(id);
 
 const DEFAULT_MODELS = {
   typesafe: 'jev-latest',
-  openrouter: 'deepseek/deepseek-v4-flash',
+  openrouter: 'typesafe/jev-1.13',
+  'openrouter-chat': 'deepseek/deepseek-v4-flash',
 };
 
 function send(message) {
@@ -18,13 +19,15 @@ function send(message) {
 
 function applyProviderVisibility() {
   const provider = $('provider').value;
+  const isOpenRouter = provider.startsWith('openrouter');
   $('key-typesafe').hidden = provider !== 'typesafe';
-  $('key-openrouter').hidden = provider !== 'openrouter';
+  $('key-openrouter').hidden = !isOpenRouter;
   $('model').placeholder = DEFAULT_MODELS[provider] || '';
-  $('model-hint').textContent =
-    provider === 'openrouter'
-      ? 'Leave empty for the default. Any OpenRouter chat model with structured output works, e.g. openai/gpt-5-nano.'
-      : "Leave empty for the default. Pin the versioned ID (e.g. jev-1.13.0) once you've tuned the sensitivity.";
+  $('model-hint').textContent = isOpenRouter
+    ? provider === 'openrouter'
+      ? 'Leave empty for typesafe/jev-1.13. Any model the Decisions router serves works.'
+      : 'Leave empty for the default. Any OpenRouter chat model with structured output works, e.g. openai/gpt-5-nano.'
+    : "Leave empty for the default. Pin the versioned ID (e.g. jev-1.13.0) once you've tuned the sensitivity.";
 }
 
 async function load() {
