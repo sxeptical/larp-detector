@@ -61,12 +61,17 @@ lib/questions.js          The LARP taxonomy — one batched Jev request per post
                           stat_farming, the tech-LARP composite grandiose_claims
                           vs technical_specifics, headline_larp,
                           headline_supported, is_ai_written) plus the
-                          larp_intensity scale. Two outcomes.
+                          larp_intensity scale, the fabrication/attribution
+                          axes, and news_report — the relayed-report
+                          exemption axis. Two outcomes.
 lib/verdict.js            Composes answers into a REAL/LARP badge. Owns the
                           gap math: image_crafted × (1 − work_shown) for the
                           persona signal, grandiose × (1 − specifics) for
                           tech-LARP, headline_larp × (1 − headline_supported)
                           for the cross-field signal. Thresholds live here.
+                          news_report buys relief from the persona/borrowed/
+                          costume signals; the relief decays with commentary
+                          dress (substance-first).
 lib/heuristics.js         Regex fallback + mock mode. Same answer shape as Jev.
 lib/jev-client.js         Provider adapter: typesafe (Jev direct) /
                           openrouter (Jev via OpenRouter's alpha Decisions
@@ -89,6 +94,13 @@ Design decisions worth knowing:
 - **Headlines are parsed from card text lines** — the current UI has no stable
   selector for the actor subtitle. `dev/test-headline-parser.mjs` tests the real
   parser against line arrays sampled from the live feed.
+- **Relayed news is exempt, substance-first.** A shared article imports its
+  substance by design, so the persona gap, borrowed-content bonus, and costume
+  gap all misread it. The `news_report` noul measures the relay; the relief
+  scales with it and decays as author commentary (self-focus, bait,
+  moralizing) rides on the post — a news link wrapped in a take is still
+  judged as the take. Exempt posts are REAL, so they only badge when
+  "Also badge the REAL ONEs" is on.
 - **Badges are status pills pinned to the top-right of the post header.** No
   emoji, no animations for now — they render once and stay while you scroll.
   The 96px right-offset keeps them clear of LinkedIn's own dismiss/menu/Follow

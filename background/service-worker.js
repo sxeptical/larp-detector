@@ -29,7 +29,7 @@ const CACHE_LIMIT = 2000;
 const CONCURRENCY = 3;
 
 /** Bump when the question set changes; invalidates the verdict cache. */
-const TAX_VERSION = 'tax-2';
+const TAX_VERSION = 'tax-3';
 const VERDICT_CACHE_ROOT = 'larp_verdict_cache';
 
 // ---------------------------------------------------------------------------

@@ -35,6 +35,7 @@ globalThis.fetch = async (url, opts) => {
         verifiable_story: { type: 'noul', noul: 0.05 },
         borrowed_content: { type: 'noul', noul: 0.3 },
         virtue_performance: { type: 'noul', noul: 0.1 },
+        news_report: { type: 'noul', noul: 0.05 },
         larp_intensity: {
           type: 'score',
           score: 3.6,
@@ -66,6 +67,7 @@ globalThis.fetch = async (url, opts) => {
               verifiable_story: 0.05,
               borrowed_content: 0.3,
               virtue_performance: 0.1,
+              news_report: 0.05,
               larp_intensity: 3.5,
             }),
           },
@@ -145,6 +147,14 @@ const SHORT = { urn: 'urn:li:activity:3', post_text: 'Congrats!', author_headlin
 
 const AD = { urn: 'urn:li:activity:4', post_text: 'Buy our thing. '.repeat(10), author_headline: 'Vendor', isPromoted: true };
 
+const WIRE_SHARE = {
+  urn: 'urn:li:activity:5',
+  post_text:
+    'BREAKING: According to a Reuters report, regulators fined the company €600M in an antitrust ruling announced on Tuesday. The filing shows regulators cited exclusivity clauses with cloud customers. Full story: https://www.reuters.com/technology/eu-antitrust-fine',
+  author_headline: 'Industry Analyst',
+  isPromoted: false,
+};
+
 // 1. Settings round-trip
 let res = await call({ type: 'SET_SETTINGS', patch: { provider: 'mock', sensitivity: 1.5 } });
 check('SET_SETTINGS', res.ok && res.settings.provider === 'mock');
@@ -160,6 +170,12 @@ check('coffee parable is shown at default sensitivity', res.show === true);
 
 res = await call({ type: 'ANALYZE_POST', post: HEADLINE_COSTUME });
 check('tech-larp + costume headline → LARP', res.verdict?.kind === 'larp' && res.verdict?.label === 'LARP', `${res.verdict?.label} ${res.verdict?.pct}%`);
+
+// News relief: a relayed report is exempt from the persona/borrowed signals
+res = await call({ type: 'ANALYZE_POST', post: WIRE_SHARE });
+check('relayed news report → genuine (exempt)', res.verdict?.kind === 'genuine', `${res.verdict?.label} intensity ${res.verdict?.score}`);
+check('relayed news report is hidden by default (no REAL badge)', res.show === false);
+check('relayed news report tooltip mentions the relief', String(res.verdict?.details?.join(' ')).includes('Relayed report'));
 
 // 3. Cache: second call is a hit, same verdict
 const again = await call({ type: 'ANALYZE_POST', post: COFFEE });

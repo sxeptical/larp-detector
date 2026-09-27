@@ -100,6 +100,24 @@ const SAMPLES = [
       "\"You don't climb the ladder of success alone.\" — Naval\n\nRead that again.\n\nPowerful. Credit: @naval. Follow for more wisdom.\n\nAgree?",
     author_headline: 'Growth Mindset Mentor | Curator',
   },
+  {
+    label: 'news wire share',
+    post_text:
+      "BREAKING: According to a Reuters report, regulators fined the company €600M in an antitrust ruling announced on Tuesday. The filing shows regulators cited exclusivity clauses with cloud customers.\n\nFull story: https://www.reuters.com/technology/eu-antitrust-fine",
+    author_headline: 'Industry Analyst',
+  },
+  {
+    label: 'news + bait take',
+    post_text:
+      "Big news: Reuters reports regulators just fined the biggest cloud vendor €600M for antitrust.\n\nHere's the thing nobody is talking about — this changes everything for your pricing strategy.\n\nMost people will ignore this. Which one are you? Agree?",
+    author_headline: 'Visionary Founder | Revenue Strategist | Top Voice',
+  },
+  {
+    label: 'news digest bullets',
+    post_text:
+      "This week in tech, per Bloomberg and CNBC:\n\n✅ Regulators fined a cloud vendor €600M\n✅ Two chipmakers announced a merger\n✅ A major outage took down payments for hours\n\nWhich one resonates most? 👇",
+    author_headline: 'LinkedIn News Editor',
+  },
 ];
 
 function pct(x) {
