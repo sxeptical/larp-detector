@@ -30,26 +30,34 @@ function applyProviderVisibility() {
     : "Leave empty for the default. Pin the versioned ID (e.g. jev-1.13.0) once you've tuned the sensitivity.";
 }
 
+// Keys come from a separate message (the worker only serves it to extension
+// pages). Until they've loaded, saving must not send the empty fields — that
+// would overwrite the stored keys.
+let secretsLoaded = false;
+
 async function load() {
-  const { ok, settings } = await send({ type: 'GET_SETTINGS' });
+  const [{ ok, settings }, secretsRes] = await Promise.all([
+    send({ type: 'GET_SETTINGS' }),
+    send({ type: 'GET_SECRETS' }),
+  ]);
   if (!ok) return;
   $('provider').value = settings.provider;
-  $('apiKey').value = settings.apiKey || '';
-  $('openrouterApiKey').value = settings.openrouterApiKey || '';
   $('model').value = settings.model || '';
+  if (secretsRes?.ok) {
+    $('apiKey').value = secretsRes.secrets.apiKey || '';
+    $('openrouterApiKey').value = secretsRes.secrets.openrouterApiKey || '';
+    secretsLoaded = true;
+  }
   applyProviderVisibility();
 }
 
 function save() {
-  return send({
-    type: 'SET_SETTINGS',
-    patch: {
-      provider: $('provider').value,
-      apiKey: $('apiKey').value.trim(),
-      openrouterApiKey: $('openrouterApiKey').value.trim(),
-      model: $('model').value.trim(),
-    },
-  });
+  const patch = { provider: $('provider').value, model: $('model').value.trim() };
+  if (secretsLoaded) {
+    patch.apiKey = $('apiKey').value.trim();
+    patch.openrouterApiKey = $('openrouterApiKey').value.trim();
+  }
+  return send({ type: 'SET_SETTINGS', patch });
 }
 
 $('provider').addEventListener('change', () => {

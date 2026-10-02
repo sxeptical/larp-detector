@@ -6,14 +6,16 @@
  * DOM work and talks to this worker via runtime messages.
  */
 
-import { callJev, providerApiKey } from '../lib/jev-client.js';
+import { callJev, providerApiKey, resolveModel } from '../lib/jev-client.js';
 import { analyzeHeuristically } from '../lib/heuristics.js';
 import { composeVerdict, shouldShow, sponsoredVerdict, DEFAULT_SENSITIVITY } from '../lib/verdict.js';
 
 const STORAGE_KEYS = {
-  settings: 'larp_settings',
-  cache: 'larp_verdict_cache', // kept in sync with VERDICT_CACHE_ROOT below
+  settings: 'larp_settings', // everything except the API keys
+  secrets: 'larp_secrets', // API keys only — never sent to content scripts
+  cache: 'larp_verdict_cache',
 };
+const SECRET_FIELDS = ['apiKey', 'openrouterApiKey'];
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -30,24 +32,94 @@ const CONCURRENCY = 3;
 
 /** Bump when the question set changes; invalidates the verdict cache. */
 const TAX_VERSION = 'tax-3';
-const VERDICT_CACHE_ROOT = 'larp_verdict_cache';
+
+/** Verdicts produced because a provider call failed — shown, but never cached. */
+const FALLBACK_SOURCE = 'heuristic-fallback';
 
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
 
+/**
+ * The in-memory copy is authoritative once loaded. Every message handler waits
+ * on ensureSettingsLoaded() first: a freshly woken worker would otherwise merge
+ * a patch into DEFAULT_SETTINGS and write that over the stored settings (API
+ * keys included).
+ */
 let settings = { ...DEFAULT_SETTINGS };
+let settingsReady = null;
+
+function ensureSettingsLoaded() {
+  settingsReady ??= loadSettings().catch((err) => {
+    settingsReady = null;
+    throw err;
+  });
+  return settingsReady;
+}
 
 async function loadSettings() {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS.settings);
-  settings = { ...DEFAULT_SETTINGS, ...(stored[STORAGE_KEYS.settings] || {}) };
-  return settings;
+  const stored = await chrome.storage.local.get([STORAGE_KEYS.settings, STORAGE_KEYS.secrets]);
+  const saved = stored[STORAGE_KEYS.settings] || {};
+  settings = { ...DEFAULT_SETTINGS, ...saved, ...(stored[STORAGE_KEYS.secrets] || {}) };
+  // Earlier builds kept the keys inside larp_settings — move them out.
+  if (SECRET_FIELDS.some((field) => field in saved)) await persistSettings();
+}
+
+function persistSettings() {
+  const { apiKey, openrouterApiKey, ...rest } = settings;
+  return chrome.storage.local.set({
+    [STORAGE_KEYS.settings]: rest,
+    [STORAGE_KEYS.secrets]: { apiKey, openrouterApiKey },
+  });
 }
 
 async function saveSettings(patch) {
-  settings = { ...settings, ...patch };
-  await chrome.storage.local.set({ [STORAGE_KEYS.settings]: settings });
-  return settings;
+  await ensureSettingsLoaded();
+  for (const field of Object.keys(DEFAULT_SETTINGS)) {
+    if (field in patch) settings = { ...settings, [field]: patch[field] };
+  }
+  await persistSettings();
+  broadcastSettings();
+}
+
+/** Settings as content scripts and the popup see them: key presence, never the keys. */
+function publicSettings() {
+  const { apiKey, openrouterApiKey, ...rest } = settings;
+  return { ...rest, hasApiKey: Boolean(apiKey), hasOpenrouterApiKey: Boolean(openrouterApiKey) };
+}
+
+/**
+ * Content scripts can't read chrome.storage (see restrictStorageAccess), so
+ * the worker pushes changes to open tabs. Tabs without our content script
+ * reject the message; that's expected.
+ */
+async function broadcastSettings() {
+  const message = { type: 'SETTINGS_CHANGED', settings: publicSettings() };
+  try {
+    for (const tab of await chrome.tabs.query({})) {
+      if (tab.id != null) chrome.tabs.sendMessage(tab.id, message).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[LARP] could not broadcast settings:', err);
+  }
+}
+
+/** Keep content scripts, which run next to LinkedIn's page, out of storage.local entirely. */
+function restrictStorageAccess() {
+  try {
+    chrome.storage.local
+      .setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' })
+      ?.catch((err) => console.warn('[LARP] setAccessLevel failed:', err));
+  } catch (err) {
+    console.warn('[LARP] setAccessLevel failed:', err);
+  }
+}
+
+/** Content scripts may ask for verdicts and public settings — nothing else. */
+const CONTENT_SCRIPT_MESSAGES = new Set(['ANALYZE_POST', 'GET_SETTINGS']);
+
+function isExtensionPage(sender) {
+  return typeof sender?.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''));
 }
 
 // ---------------------------------------------------------------------------
@@ -67,19 +139,35 @@ function fnv1a(str) {
   return (hash >>> 0).toString(36);
 }
 
-function cacheKey({ post_text, author_headline }) {
+/**
+ * Who produced a verdict. Switching provider, model, or going from mock/no-key
+ * to a real key must not serve verdicts from the other engine.
+ */
+function engineTag(s) {
+  if (s.provider === 'mock' || !providerApiKey(s)) return 'heuristic';
+  const provider = s.provider || 'typesafe';
+  return `${provider}:${resolveModel(provider, s.model)}`;
+}
+
+function cacheKey({ post_text, author_headline }, s) {
   // TAX_VERSION rejects verdicts cached under an older question set — the
   // composer requires the new nouls and old answers fail the missing-noul
   // check, which would silently disable badges for every cached post.
-  return `${TAX_VERSION}-${fnv1a(`${author_headline || ''}\u0000${post_text || ''}`)}`;
+  return `${TAX_VERSION}:${engineTag(s)}:${fnv1a(`${author_headline || ''}\u0000${post_text || ''}`)}`;
 }
 
 async function ensureCacheLoaded() {
   if (cacheLoaded) return;
   const stored = await chrome.storage.local.get(STORAGE_KEYS.cache);
   const obj = stored[STORAGE_KEYS.cache] || {};
-  for (const [k, v] of Object.entries(obj)) cache.set(k, v);
+  let dropped = 0;
+  for (const [k, v] of Object.entries(obj)) {
+    // Entries from an older key format or question set can never be hit again.
+    if (k.startsWith(`${TAX_VERSION}:`) && v?.verdict?.source !== FALLBACK_SOURCE) cache.set(k, v);
+    else dropped++;
+  }
   cacheLoaded = true;
+  if (dropped) persistCacheSoon();
 }
 
 function persistCacheSoon() {
@@ -141,9 +229,10 @@ const stats = {
 // Analysis
 // ---------------------------------------------------------------------------
 
-async function analyzeRaw(post) {
+/** `s` is a settings snapshot, so a call queued under one engine can't run under another. */
+async function analyzeRaw(post, s) {
   // Provider chosen in settings; heuristics double as mock mode and fallback.
-  if (settings.provider === 'mock' || !providerApiKey(settings)) {
+  if (s.provider === 'mock' || !providerApiKey(s)) {
     const result = analyzeHeuristically(post);
     if (!result) return null;
     return { ...result, source: 'heuristic' };
@@ -152,7 +241,7 @@ async function analyzeRaw(post) {
   try {
     const result = await callJev(
       { post_text: post.post_text, author_headline: post.author_headline },
-      settings
+      s
     );
     stats.sessionCalls++;
     stats.lastModel = result.model;
@@ -164,7 +253,7 @@ async function analyzeRaw(post) {
     console.warn('[LARP] Jev call failed, falling back to heuristics:', err);
     const result = analyzeHeuristically(post);
     if (!result) return null;
-    return { ...result, source: 'heuristic-fallback' };
+    return { ...result, source: FALLBACK_SOURCE };
   }
 }
 
@@ -177,7 +266,8 @@ async function analyzePost(post) {
   }
 
   await ensureCacheLoaded();
-  const key = cacheKey(post);
+  const snapshot = settings;
+  const key = cacheKey(post, snapshot);
 
   let entry = cache.get(key);
   const wasCached = Boolean(entry);
@@ -185,7 +275,7 @@ async function analyzePost(post) {
     if (!inflight.has(key)) {
       inflight.set(
         key,
-        enqueue(() => analyzeRaw(post))
+        enqueue(() => analyzeRaw(post, snapshot))
           .then((result) => {
             if (!result) return null;
             const verdict = composeVerdict(result.answers, {
@@ -199,7 +289,9 @@ async function analyzePost(post) {
       );
     }
     entry = await inflight.get(key);
-    if (entry) {
+    // A fallback verdict means the provider hiccuped; caching it would pin the
+    // noisy heuristic answer to this post long after the provider recovers.
+    if (entry && entry.verdict.source !== FALLBACK_SOURCE) {
       cache.set(key, entry);
       persistCacheSoon();
     }
@@ -220,62 +312,60 @@ const TEST_POST = {
 // Messaging
 // ---------------------------------------------------------------------------
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
-    switch (msg?.type) {
-      case 'ANALYZE_POST': {
-        try {
-          await loadSettings(); // SW may have restarted; settings live in storage
+    try {
+      if (!isExtensionPage(sender) && !CONTENT_SCRIPT_MESSAGES.has(msg?.type)) {
+        sendResponse({ ok: false, error: `${msg?.type} is not available from this context` });
+        return;
+      }
+      await ensureSettingsLoaded(); // SW may have restarted; settings live in storage
+
+      switch (msg?.type) {
+        case 'ANALYZE_POST': {
           const result = await analyzePost(msg.post);
           sendResponse({ ok: true, ...(result || { verdict: null, show: false }) });
-        } catch (err) {
-          sendResponse({ ok: false, error: err.message || String(err) });
+          break;
         }
-        break;
-      }
 
-      case 'GET_SETTINGS': {
-        await loadSettings();
-        sendResponse({ ok: true, settings });
-        break;
-      }
+        case 'GET_SETTINGS': {
+          sendResponse({ ok: true, settings: publicSettings() });
+          break;
+        }
 
-      case 'SET_SETTINGS': {
-        const next = await saveSettings(msg.patch || {});
-        sendResponse({ ok: true, settings: next });
-        break;
-      }
+        case 'GET_SECRETS': {
+          // Options page only — it needs the keys to show and edit them.
+          const { apiKey, openrouterApiKey } = settings;
+          sendResponse({ ok: true, secrets: { apiKey, openrouterApiKey } });
+          break;
+        }
 
-      case 'GET_STATS': {
-        await ensureCacheLoaded();
-        sendResponse({
-          ok: true,
-          stats: {
-            ...stats,
-            cacheSize: cache.size,
-            settings: {
-              ...settings,
-              apiKey: settings.apiKey ? '(set)' : '',
-              openrouterApiKey: settings.openrouterApiKey ? '(set)' : '',
-            },
-          },
-        });
-        break;
-      }
+        case 'SET_SETTINGS': {
+          await saveSettings(msg.patch || {});
+          sendResponse({ ok: true, settings: publicSettings() });
+          break;
+        }
 
-      case 'CLEAR_CACHE': {
-        cache.clear();
-        await chrome.storage.local.remove(STORAGE_KEYS.cache);
-        sendResponse({ ok: true });
-        break;
-      }
+        case 'GET_STATS': {
+          await ensureCacheLoaded();
+          sendResponse({
+            ok: true,
+            stats: { ...stats, cacheSize: cache.size, settings: publicSettings() },
+          });
+          break;
+        }
 
-      case 'TEST_PROVIDER': {
-        const started = performance.now();
-        try {
-          await loadSettings();
-          const post = msg.post || TEST_POST;
-          const result = await analyzeRaw(post);
+        case 'CLEAR_CACHE': {
+          await ensureCacheLoaded(); // else the pending load would repopulate what we just cleared
+          cache.clear();
+          await chrome.storage.local.remove(STORAGE_KEYS.cache);
+          sendResponse({ ok: true });
+          break;
+        }
+
+        case 'TEST_PROVIDER': {
+          const started = performance.now();
+          const result = await analyzeRaw(msg.post || TEST_POST, settings);
           const verdict = result
             ? composeVerdict(result.answers, {
                 model: result.model,
@@ -290,14 +380,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             source: result?.source ?? null,
             verdict,
           });
-        } catch (err) {
-          sendResponse({ ok: false, error: err.message || String(err) });
+          break;
         }
-        break;
-      }
 
-      default:
-        sendResponse({ ok: false, error: `Unknown message type: ${msg?.type}` });
+        default:
+          sendResponse({ ok: false, error: `Unknown message type: ${msg?.type}` });
+      }
+    } catch (err) {
+      sendResponse({ ok: false, error: err.message || String(err) });
     }
   })();
   return true; // async sendResponse
@@ -305,5 +395,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // ---------------------------------------------------------------------------
 
-loadSettings();
+restrictStorageAccess();
+ensureSettingsLoaded();
 ensureCacheLoaded();

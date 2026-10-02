@@ -7,8 +7,10 @@
   "scripts": {
     "preview": "node dev/preview.mjs",
     "smoke": "node dev/smoke.mjs",
+    "test:worker": "node dev/test-worker-state.mjs",
     "test:headline": "node dev/test-headline-parser.mjs",
     "bundle:test": "node dev/build-test-bundle.mjs",
-    "icons": "python3 dev/make-icons.py"
+    "icons": "python3 dev/make-icons.py",
+    "test": "npm run test:headline && npm run smoke && npm run test:worker"
   }
 }

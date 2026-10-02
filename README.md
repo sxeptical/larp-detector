@@ -105,8 +105,12 @@ Design decisions worth knowing:
   emoji, no animations for now — they render once and stay while you scroll.
   The 96px right-offset keeps them clear of LinkedIn's own dismiss/menu/Follow
   buttons (see the measurements in `content/content.css`).
-- **The key never touches the page.** It lives in `chrome.storage.local` and is
-  only read by the service worker.
+- **API keys stay in the service worker.** They live under their own storage key
+  (`larp_secrets`), `chrome.storage.local` is closed to content scripts
+  (`setAccessLevel`), and the worker only hands keys to the options page —
+  content scripts get `hasApiKey` flags and nothing else. With no storage
+  access, content scripts learn about settings changes from a `SETTINGS_CHANGED`
+  push from the worker instead of `storage.onChanged`.
 
 ## Tuning the taxonomy
 
@@ -127,14 +131,20 @@ TYPESAFE_API_KEY=... node dev/preview.mjs --live                    # through re
 OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter     # through Jev via OpenRouter Decisions
 OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter-chat # through the chat-model estimate
 node dev/smoke.mjs            # integration test: real service worker, mocked endpoints
+node dev/test-worker-state.mjs  # worker state: cold start, failure caching, cache keys, key isolation
+npm test                      # headline parser + smoke + worker-state
 node dev/test-headline-parser.mjs   # headline parser vs lines sampled from the live feed
 ```
 
 6. **Bump `TAX_VERSION` in `background/service-worker.js` whenever the question
-   set changes.** The verdict cache is keyed under that version, so changing
+   set changes.** The verdict cache is keyed `tax-N:<engine>:<hash>`, so changing
    wording without bumping it leaves stale verdicts that fail the composer's
    missing-noul check. (Cache invalidation uses the same mechanism the chat
    provider's estimate-confidence guard relies on — change one, check both.)
+   `<engine>` is the provider and model (or `heuristic` for mock mode / no key),
+   so switching provider, pinning a model, or adding a key never serves another
+   engine's verdicts. Verdicts produced because a provider call *failed*
+   (`heuristic-fallback`) are shown but never cached.
 
 Browser-test the content script on the real LinkedIn DOM (uses the
 Browser Control CLI; needs a logged-in LinkedIn tab attached):

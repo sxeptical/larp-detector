@@ -131,6 +131,13 @@
   init();
 
   async function init() {
+    if (!contextValid()) {
+      handleInvalidatedContext();
+      return;
+    }
+    // Registered before the first GET_SETTINGS so a change can't slip between them.
+    chrome.runtime.onMessage.addListener(onRuntimeMessage);
+
     settings = await getSettings();
     if (!contextValid()) {
       handleInvalidatedContext();
@@ -141,17 +148,26 @@
     patchHistory();
     scan();
     scanTimer = setInterval(scan, SCAN_INTERVAL_MS);
+  }
 
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'local') return;
-      const next = changes['larp_settings']?.newValue;
-      if (!next) return;
-      const wasEnabled = settings.enabled;
-      settings = { ...settings, ...next };
-      if (!settings.enabled && wasEnabled) removeAllBadges();
-      if (settings.enabled && !wasEnabled) scan();
-      if (wasEnabled) rescanVisible(); // sensitivity / showGenuine changed
-    });
+  /**
+   * The worker pushes settings changes here. Content scripts have no access to
+   * chrome.storage (the API keys live there), so there is no onChanged to use.
+   */
+  function onRuntimeMessage(msg) {
+    if (msg?.type === 'SETTINGS_CHANGED' && msg.settings) applySettings(msg.settings);
+  }
+
+  function applySettings(next) {
+    const wasEnabled = settings.enabled;
+    settings = { ...settings, ...next };
+    if (!settings.enabled) {
+      if (wasEnabled) removeAllBadges();
+    } else if (!wasEnabled) {
+      scan();
+    } else {
+      rescanVisible(); // sensitivity / showGenuine changed
+    }
   }
 
   function getSettings() {
@@ -425,7 +441,7 @@
     const sent = safeSendMessage({ type: 'ANALYZE_POST', post }, (res) => {
       removeBadge(el, urn, 'analyzing');
       if (!res?.ok) {
-        analyzeLocally(el, urn, post); // service worker unreachable → heuristics
+        analyzeLocally(el, urn, post, textKey); // service worker unreachable → heuristics
         return;
       }
       if (urnOf(el) !== urn) {
@@ -443,7 +459,7 @@
   }
 
   /** Offline path: dynamic-import the heuristics + composer from the extension bundle. */
-  async function analyzeLocally(el, urn, post) {
+  async function analyzeLocally(el, urn, post, textKey) {
     if (!contextValid()) {
       handleInvalidatedContext();
       return;
@@ -614,6 +630,11 @@
     scanTimer = null;
     intersectionObserver?.disconnect();
     mutationObserver?.disconnect();
+    try {
+      chrome.runtime.onMessage.removeListener(onRuntimeMessage);
+    } catch {
+      // context already gone
+    }
   };
 
   window.addEventListener('pagehide', () => {
