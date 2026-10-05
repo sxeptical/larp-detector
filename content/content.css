@@ -2,7 +2,7 @@
  * LARP Detector — badge styles.
  *
  * Badge = small status pill pinned to the top-right of the post card:
- * [dot] LABEL | NN%. It sits on the header strip (the card's own background,
+ * [dot] LABEL | NN%, plus a rubber stamp slammed over LARP posts. It sits on the header strip (the card's own background,
  * never an image), so it stays legible on media-heavy posts.
  *
  * Placement inside the card, measured against LinkedIn's own controls:
@@ -17,78 +17,291 @@
   position: relative !important;
 }
 
-.larp-badge {
+/* --- Tokens: one tone per verdict, light + dark --------------------------- */
+.larp-badge,
+.larp-card {
+  --larp-fg: #b42318;
+  --larp-bg: #fef3f2;
+  --larp-border: #fecdca;
+  --larp-accent: #d92d20;
+  --larp-muted: rgba(0, 0, 0, 0.55);
+  --larp-surface: #ffffff;
+  --larp-text: #1d1d1f;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+.larp-badge--real,
+.larp-card--real {
+  --larp-fg: #067647;
+  --larp-bg: #ecfdf3;
+  --larp-border: #abefc6;
+  --larp-accent: #17b26a;
+}
+.larp-badge--sponsored,
+.larp-card--sponsored {
+  --larp-fg: #93370d;
+  --larp-bg: #fffaeb;
+  --larp-border: #fedf89;
+  --larp-accent: #f79009;
+}
+@media (prefers-color-scheme: dark) {
+  .larp-badge,
+  .larp-card {
+    --larp-fg: #fda29b;
+    --larp-bg: rgba(217, 45, 32, 0.16);
+    --larp-border: rgba(253, 162, 155, 0.3);
+    --larp-accent: #f97066;
+    --larp-muted: rgba(255, 255, 255, 0.6);
+    --larp-surface: #1f2024;
+    --larp-text: #ececee;
+  }
+  .larp-badge--real,
+  .larp-card--real {
+    --larp-fg: #75e0a7;
+    --larp-bg: rgba(23, 178, 106, 0.15);
+    --larp-border: rgba(117, 224, 167, 0.3);
+    --larp-accent: #47cd89;
+  }
+  .larp-badge--sponsored,
+  .larp-card--sponsored {
+    --larp-fg: #fec84b;
+    --larp-bg: rgba(247, 144, 9, 0.15);
+    --larp-border: rgba(254, 200, 75, 0.3);
+    --larp-accent: #fdb022;
+  }
+}
+
+/* --- The pill: "• LARP | 73%" --------------------------------------------- */
+.larp-badge:not(.larp-stamp) {
   position: absolute !important;
   top: 8px;
   right: 96px;
-  z-index: 5;
+  z-index: 6;
 
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 5px;
+  border: 1px solid var(--larp-border);
+  background: var(--larp-bg);
+  color: var(--larp-fg);
 
-  background: rgba(255, 255, 255, 0.95);
-  color: #2f2f2f;
-
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.01em;
-  line-height: 1.5;
+  line-height: 1;
   white-space: nowrap;
 
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
   cursor: help;
   user-select: none;
+  outline: none;
+}
+.larp-badge:not(.larp-stamp):focus-visible {
+  box-shadow: 0 0 0 2px var(--larp-border);
 }
 
-@media (prefers-color-scheme: dark) {
-  .larp-badge {
-    background: rgba(30, 31, 36, 0.95);
-    border-color: rgba(255, 255, 255, 0.16);
-    color: #e6e6e8;
-  }
-}
-
-/* Status dot — red for larp, green for real, gold for paid */
 .larp-badge__dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex: none;
+  background: var(--larp-accent);
 }
-.larp-badge__dot--red {
-  background: #dc2626;
-}
-.larp-badge__dot--green {
-  background: #16a34a;
-}
-.larp-badge__dot--gold {
-  background: #d97706;
-}
-
 .larp-badge__sep {
   opacity: 0.35;
   font-weight: 400;
 }
-
 .larp-badge__pct {
   font-weight: 500;
-  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
 }
 
-.larp-badge--analyzing {
-  color: rgba(0, 0, 0, 0.5);
-  font-weight: 500;
-  cursor: default;
+/* --- The stamp: slammed over LARP posts, then settles out of the way ------ */
+.larp-stamp {
+  position: absolute !important;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+  background: rgba(217, 45, 32, 0.1);
+  animation: larp-stamp-wash 2.4s ease forwards;
+}
+.larp-stamp::after {
+  content: attr(data-stamp);
+  position: absolute;
+  top: 26%;
+  left: 50%;
+  padding: 2px 22px;
+  border: 6px solid #d92d20;
+  border-radius: 10px;
+  color: #d92d20;
+  font-family: Impact, 'Arial Black', 'Helvetica Neue', sans-serif;
+  font-size: 64px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.05;
+  /* solid ink: inner ring + slight ink bleed */
+  box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #d92d20, 0 0 1px #d92d20;
+  text-shadow: 0 0 1px #d92d20;
+  background: rgba(255, 255, 255, 0.85);
+  transform: translate(-50%, 0) rotate(-12deg);
+  opacity: 1;
+  animation: larp-stamp-slam 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both,
+    larp-stamp-settle 0.6s ease 1.8s forwards;
+}
+/* After the slam: a small faded stamp stays top-left so the post is readable */
+.larp-stamp.is-settled::after {
+  animation: none;
+  top: 10px;
+  left: auto;
+  right: 220px;
+  font-size: 20px;
+  padding: 0 8px;
+  border-width: 2px;
+  border-radius: 4px;
+  box-shadow: none;
+  transform: rotate(-8deg);
+  opacity: 0.8;
+}
+
+@keyframes larp-stamp-slam {
+  from { transform: translate(-50%, 0) rotate(-12deg) scale(2.4); opacity: 0; }
+  to { transform: translate(-50%, 0) rotate(-12deg) scale(1); opacity: 1; }
+}
+@keyframes larp-stamp-settle {
+  to { opacity: 0; }
+}
+@keyframes larp-stamp-wash {
+  0%, 70% { background: rgba(217, 45, 32, 0.1); }
+  100% { background: transparent; }
 }
 
 @media (prefers-color-scheme: dark) {
-  .larp-badge--analyzing {
-    color: rgba(255, 255, 255, 0.55);
+  .larp-stamp::after {
+    border-color: #f97066;
+    color: #f97066;
+    background: rgba(31, 32, 36, 0.85);
+    box-shadow: inset 0 0 0 3px #1f2024, inset 0 0 0 5px #f97066;
   }
+}
+@media (prefers-reduced-motion: reduce) {
+  .larp-stamp,
+  .larp-stamp::after { animation: none; }
+  .larp-stamp { background: transparent; }
+}
+@media (max-width: 600px) {
+  .larp-stamp.is-settled::after { display: none; }
+}
+
+/* --- Analyzing state: quiet shimmer ---------------------------------------- */
+.larp-badge--analyzing {
+  --larp-bg: rgba(0, 0, 0, 0.04);
+  --larp-border: rgba(0, 0, 0, 0.08);
+  color: var(--larp-muted);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: default;
+  background: linear-gradient(90deg, var(--larp-bg) 0%, rgba(0, 0, 0, 0.09) 50%, var(--larp-bg) 100%);
+  background-size: 200% 100%;
+  animation: larp-shimmer 1.4s linear infinite;
+}
+@media (prefers-color-scheme: dark) {
+  .larp-badge--analyzing {
+    --larp-bg: rgba(255, 255, 255, 0.05);
+    --larp-border: rgba(255, 255, 255, 0.1);
+    background: linear-gradient(90deg, var(--larp-bg) 0%, rgba(255, 255, 255, 0.12) 50%, var(--larp-bg) 100%);
+    background-size: 200% 100%;
+  }
+}
+@keyframes larp-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .larp-badge--analyzing { animation: none; }
+}
+
+/* --- Hover card (rendered in <body>, fixed) --------------------------------- */
+.larp-card {
+  position: fixed;
+  z-index: 2147483000;
+  width: 280px;
+  max-width: calc(100vw - 16px);
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--larp-border);
+  border-top: 3px solid var(--larp-accent);
+  background: var(--larp-surface);
+  color: var(--larp-text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16), 0 2px 6px rgba(0, 0, 0, 0.08);
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+.larp-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.larp-card__title {
+  color: var(--larp-fg);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.larp-card__pct {
+  color: var(--larp-muted);
+  font-variant-numeric: tabular-nums;
+}
+.larp-card__bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--larp-bg);
+  overflow: hidden;
+}
+.larp-card__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--larp-accent);
+}
+.larp-card__caption {
+  margin-top: 4px;
+  color: var(--larp-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.larp-card__list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+.larp-card__list li {
+  position: relative;
+  padding-left: 12px;
+}
+.larp-card__list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--larp-accent);
+}
+.larp-card__list li.is-meta {
+  margin-top: 4px;
+  color: var(--larp-muted);
+  font-size: 11px;
+}
+.larp-card__list li.is-meta::before {
+  display: none;
 }

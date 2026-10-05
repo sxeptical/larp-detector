@@ -101,7 +101,9 @@ globalThis.chrome = {
     },
     onChanged: { addListener: () => {} },
   },
+  tabs: { query: async () => [], sendMessage: async () => {} },
   runtime: {
+    getURL: (path) => `chrome-extension://smoke/${path}`,
     onMessage: {
       addListener: (fn) => {
         messageHandler = fn;
@@ -116,7 +118,7 @@ if (!messageHandler) throw new Error('service worker never registered a message 
 
 function call(message) {
   return new Promise((resolve) => {
-    messageHandler(message, {}, resolve);
+    messageHandler(message, { url: 'chrome-extension://smoke/ui/popup.html' }, resolve);
   });
 }
 

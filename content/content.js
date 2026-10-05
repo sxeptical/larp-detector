@@ -315,8 +315,8 @@
   // Our own badge renders inside the card and pollutes innerText — filter it.
   // The pill is inline-flex, so it appears as ONE line: "LARP | 33%".
   // Legacy role labels are kept so stale-build badges in test pages don't leak.
-  const RE_BADGE_LABEL = /^(real( one)?|larp|sponsored|philosopher|10x engineer|influencer|martyr|bait|ai slop)(\s*[|·]?\s*\d{1,3}%)?$/i;
-  const RE_PERCENT = /^\d{1,3}%$/;
+  const RE_BADGE_LABEL = /^(real( one)?|larp|sponsored|philosopher|10x engineer|influencer|martyr|bait|ai slop)(\s*[|·]?\s*~?\d{1,3}%)?$/i;
+  const RE_PERCENT = /^~?\d{1,3}%$/;
 
   function cardLines(el) {
     return el.innerText
@@ -510,6 +510,7 @@
   }
 
   function disposeBadge(badge) {
+    if (badge.matches(':hover, :focus')) hideHoverCard();
     badge.remove();
   }
 
@@ -576,17 +577,19 @@
       if (opts.textKey && verdict) verdictByText.set(opts.textKey, { verdict, show });
     }
 
+    const tone = verdict.kind === 'genuine' ? 'real' : verdict.kind === 'sponsored' ? 'sponsored' : 'larp';
     const badge = document.createElement('div');
-    badge.className = 'larp-badge';
+    badge.className = `larp-badge larp-badge--${tone}`;
     badge.dataset.urn = urn;
     badge.dataset.kind = 'verdict';
     badge.dataset.label = verdict.label || 'LARP';
     badge.dataset.pct = String(verdict.pct ?? '');
+    badge.tabIndex = 0;
+    badge.setAttribute('role', 'button');
+    badge.setAttribute('aria-label', `${verdict.label}${typeof verdict.pct === 'number' ? `, ${verdict.pct}%` : ''}. Show details`);
 
     const dot = document.createElement('span');
-    dot.className = `larp-badge__dot larp-badge__dot--${
-      verdict.kind === 'genuine' ? 'green' : verdict.kind === 'sponsored' ? 'gold' : 'red'
-    }`;
+    dot.className = 'larp-badge__dot';
 
     const label = document.createElement('span');
     label.className = 'larp-badge__label';
@@ -606,12 +609,109 @@
       badge.append(sep, pct);
     }
 
-    badge.title = [`LARPING AS: ${verdict.label}`, ...(verdict.details || [])].join('\n');
-
+    attachHoverCard(badge, verdict, tone);
     insertBadge(el, badge);
+    if (tone === 'larp') el.appendChild(stampFor(badge));
   }
 
+  /**
+   * The rubber stamp slammed over a LARP post. Same urn/kind/label as the pill
+   * so removeBadge and the idempotence check treat them as one verdict. Its
+   * word is CSS `content`, never a text node — innerText (and so the post
+   * hash) can't see it.
+   */
+  function stampFor(badge) {
+    const stamp = document.createElement('div');
+    stamp.className = 'larp-badge larp-stamp';
+    stamp.setAttribute('aria-hidden', 'true');
+    Object.assign(stamp.dataset, {
+      urn: badge.dataset.urn,
+      kind: 'verdict',
+      label: badge.dataset.label,
+      pct: badge.dataset.pct,
+      stamp: 'LARP',
+    });
+    stamp.addEventListener('animationend', (e) => {
+      if (e.animationName === 'larp-stamp-settle') stamp.classList.add('is-settled');
+    });
+    return stamp;
+  }
+
+  // --- Hover card -------------------------------------------------------------
+  // Lives in document.body, NOT inside the post card: anything rendered in the
+  // card ends up in innerText and would change the post hash.
+  let hoverCard = null;
+
+  function hideHoverCard() {
+    hoverCard?.remove();
+    hoverCard = null;
+  }
+
+  function showHoverCard(badge, verdict, tone) {
+    hideHoverCard();
+    const card = document.createElement('div');
+    card.className = `larp-card larp-card--${tone}`;
+    card.setAttribute('role', 'tooltip');
+
+    const head = document.createElement('div');
+    head.className = 'larp-card__head';
+    const title = document.createElement('span');
+    title.className = 'larp-card__title';
+    title.textContent = verdict.label;
+    head.append(title);
+    if (typeof verdict.pct === 'number') {
+      const pct = document.createElement('span');
+      pct.className = 'larp-card__pct';
+      pct.textContent = `${verdict.estimated ? '~' : ''}${verdict.pct}% confidence`;
+      head.append(pct);
+    }
+    card.append(head);
+
+    if (tone !== 'sponsored' && typeof verdict.score === 'number') {
+      const bar = document.createElement('div');
+      bar.className = 'larp-card__bar';
+      const fill = document.createElement('span');
+      fill.style.width = `${Math.round((Math.min(4, Math.max(0, verdict.score)) / 4) * 100)}%`;
+      bar.append(fill);
+      const cap = document.createElement('div');
+      cap.className = 'larp-card__caption';
+      cap.textContent = `LARP intensity ${verdict.score.toFixed(1)} / 4`;
+      card.append(bar, cap);
+    }
+
+    const list = document.createElement('ul');
+    list.className = 'larp-card__list';
+    for (const line of verdict.details || []) {
+      if (/^LARP intensity:/.test(line)) continue; // already shown as the bar
+      const li = document.createElement('li');
+      if (/^Source:|^Estimated confidence/.test(line)) li.className = 'is-meta';
+      li.textContent = line;
+      list.append(li);
+    }
+    card.append(list);
+
+    document.body.append(card);
+    const r = badge.getBoundingClientRect();
+    const w = card.offsetWidth;
+    const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w));
+    const below = r.bottom + 6 + card.offsetHeight < window.innerHeight;
+    card.style.left = `${left}px`;
+    card.style.top = `${below ? r.bottom + 6 : r.top - card.offsetHeight - 6}px`;
+    hoverCard = card;
+  }
+
+  function attachHoverCard(badge, verdict, tone) {
+    const show = () => showHoverCard(badge, verdict, tone);
+    badge.addEventListener('mouseenter', show);
+    badge.addEventListener('focus', show);
+    badge.addEventListener('mouseleave', hideHoverCard);
+    badge.addEventListener('blur', hideHoverCard);
+  }
+
+  window.addEventListener('scroll', hideHoverCard, { passive: true, capture: true });
+
   function removeAllBadges() {
+    hideHoverCard();
     for (const badge of document.querySelectorAll('.larp-badge')) disposeBadge(badge);
     verdictByUrn.clear();
     verdictByText.clear();

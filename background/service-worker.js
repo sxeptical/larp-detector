@@ -31,7 +31,7 @@ const CACHE_LIMIT = 2000;
 const CONCURRENCY = 3;
 
 /** Bump when the question set changes; invalidates the verdict cache. */
-const TAX_VERSION = 'tax-3';
+const TAX_VERSION = 'tax-4';
 
 /** Verdicts produced because a provider call failed — shown, but never cached. */
 const FALLBACK_SOURCE = 'heuristic-fallback';
@@ -119,7 +119,12 @@ function restrictStorageAccess() {
 const CONTENT_SCRIPT_MESSAGES = new Set(['ANALYZE_POST', 'GET_SETTINGS']);
 
 function isExtensionPage(sender) {
-  return typeof sender?.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''));
+  return (
+    sender?.id === chrome.runtime.id &&
+    !sender.tab &&
+    typeof sender.url === 'string' &&
+    sender.url.startsWith(chrome.runtime.getURL(''))
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +134,8 @@ function isExtensionPage(sender) {
 const cache = new Map(); // key -> { verdict, ts, model }
 let cacheLoaded = false;
 let persistTimer = null;
+/** Bumped by CLEAR_CACHE so requests already in flight don't write back. */
+let cacheGeneration = 0;
 
 function fnv1a(str) {
   let hash = 0x811c9dc5;
@@ -170,14 +177,17 @@ async function ensureCacheLoaded() {
   if (dropped) persistCacheSoon();
 }
 
+function pruneCache() {
+  if (cache.size <= CACHE_LIMIT) return;
+  const entries = [...cache.entries()].sort((a, b) => a[1].ts - b[1].ts);
+  for (const [k] of entries.slice(0, cache.size - CACHE_LIMIT)) cache.delete(k);
+}
+
 function persistCacheSoon() {
+  // Prune now, not in the timer: MV3 can kill the worker before it fires.
+  pruneCache();
   clearTimeout(persistTimer);
   persistTimer = setTimeout(async () => {
-    // Prune oldest if over the limit
-    if (cache.size > CACHE_LIMIT) {
-      const entries = [...cache.entries()].sort((a, b) => a[1].ts - b[1].ts);
-      for (const [k] of entries.slice(0, cache.size - CACHE_LIMIT)) cache.delete(k);
-    }
     await chrome.storage.local.set({
       [STORAGE_KEYS.cache]: Object.fromEntries(cache),
     });
@@ -269,6 +279,7 @@ async function analyzePost(post) {
   const snapshot = settings;
   const key = cacheKey(post, snapshot);
 
+  const generation = cacheGeneration;
   let entry = cache.get(key);
   const wasCached = Boolean(entry);
   if (!entry) {
@@ -291,7 +302,7 @@ async function analyzePost(post) {
     entry = await inflight.get(key);
     // A fallback verdict means the provider hiccuped; caching it would pin the
     // noisy heuristic answer to this post long after the provider recovers.
-    if (entry && entry.verdict.source !== FALLBACK_SOURCE) {
+    if (entry && entry.verdict.source !== FALLBACK_SOURCE && generation === cacheGeneration) {
       cache.set(key, entry);
       persistCacheSoon();
     }
@@ -357,6 +368,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         case 'CLEAR_CACHE': {
           await ensureCacheLoaded(); // else the pending load would repopulate what we just cleared
+          cacheGeneration++;
+          inflight.clear();
+          clearTimeout(persistTimer);
           cache.clear();
           await chrome.storage.local.remove(STORAGE_KEYS.cache);
           sendResponse({ ok: true });

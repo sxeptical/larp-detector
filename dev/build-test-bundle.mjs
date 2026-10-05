@@ -55,6 +55,7 @@ window.chrome = {
     id: 'test-shim',
     lastError: undefined,
     getURL: (p) => p,
+    onMessage: { addListener: () => {}, removeListener: () => {} },
     sendMessage: (msg, cb) => {
       if (msg.type === 'GET_SETTINGS') {
         setTimeout(() => cb({ ok: true, settings: __testSettings }), 10);
@@ -84,7 +85,6 @@ window.chrome = {
       setTimeout(() => cb({ ok: false, error: 'unknown message type ' + msg.type }), 0);
     },
   },
-  storage: { onChanged: { addListener: () => {} } },
 };
 `;
 
