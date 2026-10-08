@@ -180,9 +180,9 @@ for (const [layout, seed] of Object.entries(LAYOUTS)) {
     stored: {
       larp_settings: LIVE_SETTINGS,
       larp_verdict_cache: {
-        'tax-4-abc123': { ...fresh, verdict: { ...fresh.verdict, source: 'heuristic-fallback' } }, // old key format
-        'tax-4:typesafe:jev-latest:good': fresh,
-        'tax-4:typesafe:jev-latest:bad': { ...fresh, verdict: { ...fresh.verdict, source: 'heuristic-fallback' } },
+        'tax-5-abc123': { ...fresh, verdict: { ...fresh.verdict, source: 'heuristic-fallback' } }, // old key format
+        'tax-5:typesafe:jev-latest:good': fresh,
+        'tax-5:typesafe:jev-latest:bad': { ...fresh, verdict: { ...fresh.verdict, source: 'heuristic-fallback' } },
         'tax-2:typesafe:jev-latest:old': fresh, // older question set
       },
     },

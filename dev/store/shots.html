@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>LARP Detector store shots</title>
+<!-- Web Store listing art. Every person and post here is invented.
+     Render with dev/store/render.sh; ?shot=feed|why|popup|tile -->
+<link rel="stylesheet" href="../../content/content.css" />
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    width: 1280px; height: 800px; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: #f3f2ef; color: #1d1d1f;
+    display: grid; grid-template-columns: 470px 1fr; align-items: center;
+  }
+  .pitch { padding: 0 40px 0 72px; }
+  .pitch img { width: 72px; height: 72px; margin-bottom: 22px; }
+  .pitch h1 { font-size: 44px; line-height: 1.08; margin: 0 0 18px; letter-spacing: -0.02em; }
+  .pitch h1 em { font-style: normal; color: #d92d20; }
+  .pitch p { font-size: 19px; line-height: 1.45; color: #475467; margin: 0; }
+  .feed { display: flex; flex-direction: column; gap: 14px; width: 620px; }
+  .post {
+    background: #fff; border-radius: 10px; border: 1px solid #e4e4e7;
+    padding: 14px 18px 16px; position: relative; overflow: hidden;
+  }
+  .who { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .av { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 16px; flex: none; }
+  .name { font-weight: 600; font-size: 14px; }
+  .meta { font-size: 12px; color: #667085; margin-top: 1px; }
+  .text { font-size: 14px; line-height: 1.5; white-space: pre-line; }
+  .bar { display: flex; gap: 22px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #f0f0f2; font-size: 12px; color: #667085; font-weight: 600; }
+  /* Static stand-in for the hover card (normally fixed-positioned by JS). */
+  .larp-card.is-static { position: absolute; top: 34px; right: 18px; }
+  .popup-frame { width: 320px; height: 372px; border: 0; border-radius: 12px; background: #fff; box-shadow: 0 18px 50px rgba(0,0,0,.18); }
+  .popup-wrap { display: flex; gap: 28px; align-items: center; }
+  .popup-note { font-size: 15px; color: #475467; line-height: 1.5; max-width: 230px; }
+  .popup-note b { color: #1d1d1f; }
+  /* Promo tile */
+  body.tile { width: 440px; height: 280px; display: flex; align-items: center; justify-content: center; gap: 18px;
+    background: linear-gradient(160deg, #fff 0%, #fef3f2 100%); }
+  body.tile img { width: 104px; height: 104px; }
+  body.tile h2 { margin: 0; font-size: 34px; line-height: 1; letter-spacing: -0.02em; }
+  body.tile p { margin: 8px 0 0; font-size: 15px; color: #475467; }
+  body.tile .pill { display: inline-flex; gap: 6px; margin-top: 14px; }
+  body.tile .larp-badge { position: static !important; }
+</style>
+</head>
+<body>
+<script>
+const shot = new URLSearchParams(location.search).get('shot') || 'feed';
+
+const POSTS = {
+  coffee: {
+    name: 'Brad Holloway', initials: 'BH', color: '#7a5af8',
+    meta: 'Visionary Founder | Keynote Speaker | Top Voice · 2h',
+    text: "I bought a lukewarm coffee this morning.\n\nThe barista said: 'Sorry, the machine is slow today.'\n\nThat's when I realized — leadership is the same.\nSlow is not broken. Slow is brewing. ☕\n\nAgree?",
+    verdict: { tone: 'larp', label: 'LARP', pct: 91, score: 3.6, details: [
+      'Engagement bait (88%)',
+      'Fabricated story signal (79%): vivid but nothing checkable',
+      'Headline not backed by the post (status 92%, supported 6%)',
+      'Work shown: 4% · Image crafted: 95%',
+    ] },
+  },
+  postmortem: {
+    name: 'Priya Raman', initials: 'PR', color: '#12b76a',
+    meta: 'Backend Engineer at Northwind · 5h',
+    text: "Our checkout p99 jumped from 180ms to 2.4s on Tuesday. Root cause: a retry loop in the payments client that ignored the circuit breaker once the pool hit 64 connections. We capped retries at 2 with jitter and p99 is back to 190ms. Write-up and the patch are linked in the comments.",
+    verdict: { tone: 'real', label: 'REAL', pct: 94, score: 0.2, details: [] },
+  },
+  humble: {
+    name: 'Chad Merritt', initials: 'CM', color: '#f79009',
+    meta: 'Serial Entrepreneur | Investor | Dad · 1d',
+    text: "So exhausted from 4 keynotes this week. 😮‍💨\nGrateful, but my voice is gone.\n\nComment \"GROWTH\" and I'll send you the exact framework I used to 10x my audience.",
+    verdict: { tone: 'larp', label: 'LARP', pct: 87, score: 3.5, details: [] },
+  },
+};
+
+function badge(v) {
+  const b = document.createElement('div');
+  b.className = `larp-badge larp-badge--${v.tone}`;
+  b.innerHTML = `<span class="larp-badge__dot"></span><span class="larp-badge__label">${v.label}</span><span class="larp-badge__sep">|</span><span class="larp-badge__pct">${v.pct}%</span>`;
+  return b;
+}
+
+function post(p, { stamp = true } = {}) {
+  const el = document.createElement('div');
+  el.className = 'post larp-post-anchor';
+  el.innerHTML = `
+    <div class="who"><div class="av" style="background:${p.color}">${p.initials}</div>
+      <div><div class="name">${p.name}</div><div class="meta">${p.meta}</div></div></div>
+    <div class="text"></div>
+    <div class="bar"><span>Like</span><span>Comment</span><span>Repost</span><span>Send</span></div>`;
+  el.querySelector('.text').textContent = p.text;
+  el.appendChild(badge(p.verdict));
+  if (stamp && p.verdict.tone === 'larp') {
+    const s = document.createElement('div');
+    s.className = 'larp-badge larp-stamp is-settled';
+    s.dataset.stamp = 'LARP';
+    s.style.animation = 'none';
+    s.style.background = 'transparent';
+    el.appendChild(s);
+  }
+  return el;
+}
+
+function hoverCard(v) {
+  const c = document.createElement('div');
+  c.className = 'larp-card larp-card--larp is-static';
+  c.innerHTML = `<div class="larp-card__head"><span class="larp-card__title">${v.label}</span><span class="larp-card__pct">${v.pct}% confidence</span></div>
+    <div class="larp-card__bar"><span style="width:${(v.score / 4) * 100}%"></span></div>
+    <div class="larp-card__caption">LARP intensity ${v.score.toFixed(1)} / 4</div>
+    <ul class="larp-card__list">${v.details.map((d) => `<li>${d}</li>`).join('')}</ul>`;
+  return c;
+}
+
+function pitch(title, body) {
+  const d = document.createElement('div');
+  d.className = 'pitch';
+  d.innerHTML = `<img src="../../icons/icon-128.png" alt="" /><h1>${title}</h1><p>${body}</p>`;
+  return d;
+}
+
+const feed = document.createElement('div');
+feed.className = 'feed';
+
+if (shot === 'feed') {
+  document.body.append(pitch('Spot the <em>LARP</em> in your feed.', 'Every post is marked REAL or LARP as it scrolls into view — so you can skip the theatre and read the substance.'));
+  feed.append(post(POSTS.coffee), post(POSTS.postmortem), post(POSTS.humble));
+  document.body.append(feed);
+} else if (shot === 'why') {
+  document.body.append(pitch('Hover to see <em>why</em>.', 'No black box. Each verdict lists the exact tells: engagement bait, fabricated stories, costume headlines, humblebrags, AI slop.'));
+  const p = post(POSTS.coffee);
+  p.appendChild(hoverCard(POSTS.coffee.verdict));
+  p.style.minHeight = '330px';
+  feed.append(p, post(POSTS.postmortem));
+  document.body.append(feed);
+} else if (shot === 'popup') {
+  document.body.append(pitch('You set the <em>bar</em>.', 'Choose how strong the signal must be before a badge appears. Works offline out of the box, or add an API key for full analysis.'));
+  const wrap = document.createElement('div');
+  wrap.className = 'popup-wrap';
+  wrap.innerHTML = `<iframe class="popup-frame" src="../../ui/popup.html"></iframe>
+    <div class="popup-note"><b>Plain updates, layoff posts, requests for help, satire, and shared news</b> are recognised and left alone.</div>`;
+  document.body.append(wrap);
+  // popup.js has no chrome.* APIs here, so set the controls by hand.
+  wrap.querySelector('iframe').addEventListener('load', (e) => {
+    const d = e.target.contentDocument;
+    d.head.insertAdjacentHTML('beforeend', '<style>*{transition:none!important}</style>');
+    d.getElementById('enabled').checked = true;
+    d.getElementById('key-status').textContent = 'key: set ✓';
+    d.getElementById('stat-cache').textContent = '128';
+    d.getElementById('stat-model').textContent = 'model: jev-1.13';
+  });
+} else if (shot === 'tile') {
+  document.body.className = 'tile';
+  document.body.innerHTML = `<img src="../../icons/icon-128.png" alt="" />
+    <div><h2>LARP<br/>Detector</h2><p>REAL or LARP, as you scroll.</p>
+    <div class="pill"></div></div>`;
+  const pill = document.body.querySelector('.pill');
+  pill.append(badge({ tone: 'real', label: 'REAL', pct: 94 }), badge({ tone: 'larp', label: 'LARP', pct: 91 }));
+}
+</script>
+</body>
+</html>

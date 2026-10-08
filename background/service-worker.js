@@ -31,7 +31,7 @@ const CACHE_LIMIT = 2000;
 const CONCURRENCY = 3;
 
 /** Bump when the question set changes; invalidates the verdict cache. */
-const TAX_VERSION = 'tax-4';
+const TAX_VERSION = 'tax-5';
 
 /** Verdicts produced because a provider call failed — shown, but never cached. */
 const FALLBACK_SOURCE = 'heuristic-fallback';
@@ -156,11 +156,11 @@ function engineTag(s) {
   return `${provider}:${resolveModel(provider, s.model)}`;
 }
 
-function cacheKey({ post_text, author_headline }, s) {
+function cacheKey({ post_text, author_headline, media }, s) {
   // TAX_VERSION rejects verdicts cached under an older question set — the
   // composer requires the new nouls and old answers fail the missing-noul
   // check, which would silently disable badges for every cached post.
-  return `${TAX_VERSION}:${engineTag(s)}:${fnv1a(`${author_headline || ''}\u0000${post_text || ''}`)}`;
+  return `${TAX_VERSION}:${engineTag(s)}:${fnv1a(`${author_headline || ''}\u0000${post_text || ''}\u0000${media || ''}`)}`;
 }
 
 async function ensureCacheLoaded() {
@@ -250,7 +250,7 @@ async function analyzeRaw(post, s) {
 
   try {
     const result = await callJev(
-      { post_text: post.post_text, author_headline: post.author_headline },
+      { post_text: post.post_text, author_headline: post.author_headline, media: String(post.media || '').slice(0, 400) },
       s
     );
     stats.sessionCalls++;

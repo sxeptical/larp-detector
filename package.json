@@ -2,7 +2,7 @@
   "name": "larp-detector",
   "private": true,
   "version": "0.1.0",
-  "description": "Dev tooling for the LARP Detector Chrome extension. Not used by the extension itself — Chrome ignores this file.",
+  "description": "Dev tooling for the LARP Detector Chrome extension. Not used by the extension itself \u2014 Chrome ignores this file.",
   "type": "module",
   "scripts": {
     "preview": "node dev/preview.mjs",
@@ -11,6 +11,7 @@
     "test:headline": "node dev/test-headline-parser.mjs",
     "bundle:test": "node dev/build-test-bundle.mjs",
     "icons": "python3 dev/make-icons.py",
-    "test": "npm run test:headline && npm run smoke && npm run test:worker"
+    "test": "npm run test:headline && npm run smoke && npm run test:worker",
+    "package": "sh dev/package.sh"
   }
 }
