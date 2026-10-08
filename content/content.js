@@ -386,7 +386,45 @@
     const lines = cardLines(el);
     if (!author_headline) author_headline = extractHeadlineFromLines(lines, post_text);
 
-    return { urn, post_text, author_headline, isPromoted: isPromotedCard(el, lines) };
+    return { urn, post_text, author_headline, media: extractMedia(el), isPromoted: isPromotedCard(el, lines) };
+  }
+
+  /**
+   * What the post carries besides its text, as one short line for the judge:
+   * media kinds, author-written alt text, and link previews. LinkedIn's
+   * default alt is empty or "View image", so image CONTENT is not available —
+   * only that an image is there.
+   */
+  const RE_GENERIC_ALT = /^(view\b|image\b|photo\b|no alternative text)|profile|logo/i;
+  function extractMedia(el) {
+    const kinds = [];
+    if (el.querySelector('video')) kinds.push('video');
+    const bigImages = [...el.querySelectorAll('img')].filter((im) => im.width >= 200 && !/profile/i.test(im.alt || ''));
+    // A video's poster frame is an <img> too — don't report it as a photo.
+    if (bigImages.length && !kinds.includes('video')) kinds.push(bigImages.length > 1 ? `${bigImages.length} images` : 'image');
+    if (el.querySelector('iframe[title*="document" i], [aria-label*="document" i], [aria-label*="carousel" i]')) kinds.push('document');
+
+    const alts = [...new Set(bigImages.map((im) => (im.alt || '').trim()).filter((a) => a.length > 12 && !RE_GENERIC_ALT.test(a)))];
+
+    const links = [];
+    const seen = new Set();
+    for (const a of el.querySelectorAll('a[href]')) {
+      let url;
+      try { url = new URL(a.href); } catch { continue; }
+      if (/(^|\.)linkedin\.com$/.test(url.hostname)) continue;
+      const domain = url.hostname.replace(/^www\./, '');
+      if (seen.has(domain)) continue;
+      seen.add(domain);
+      const title = a.innerText.trim().replace(/\s+/g, ' ').slice(0, 120);
+      links.push(title ? `${domain} — "${title}"` : domain);
+      if (links.length >= 2) break;
+    }
+
+    const parts = [];
+    if (kinds.length) parts.push(`Attached: ${kinds.join(', ')}`);
+    if (alts.length) parts.push(`Alt text: ${alts.slice(0, 2).map((a) => `"${a.slice(0, 120)}"`).join('; ')}`);
+    if (links.length) parts.push(`Link: ${links.join('; ')}`);
+    return parts.join('. ').slice(0, 400);
   }
 
   // -------------------------------------------------------------------------

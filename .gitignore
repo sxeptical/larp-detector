@@ -14,3 +14,6 @@ npm-debug.log*
 # Generated test artifacts
 dev/test-bundle.js
 dev/*.png
+
+# Web Store upload bundles
+dist/
