@@ -36,6 +36,13 @@ globalThis.fetch = async (url, opts) => {
         borrowed_content: { type: 'noul', noul: 0.3 },
         virtue_performance: { type: 'noul', noul: 0.1 },
         news_report: { type: 'noul', noul: 0.05 },
+        is_narrative: { type: 'noul', noul: 0.2 },
+        plain_update: { type: 'noul', noul: 0.05 },
+        sensitive_context: { type: 'noul', noul: 0.02 },
+        is_satire: { type: 'noul', noul: 0.02 },
+        manufactured_villain: { type: 'noul', noul: 0.02 },
+        humblebrag: { type: 'noul', noul: 0.02 },
+        basking: { type: 'noul', noul: 0.02 },
         larp_intensity: {
           type: 'score',
           score: 3.6,
@@ -68,6 +75,13 @@ globalThis.fetch = async (url, opts) => {
               borrowed_content: 0.3,
               virtue_performance: 0.1,
               news_report: 0.05,
+              is_narrative: 0.2,
+              plain_update: 0.05,
+              sensitive_context: 0.02,
+              is_satire: 0.02,
+              manufactured_villain: 0.02,
+              humblebrag: 0.02,
+              basking: 0.02,
               larp_intensity: 3.5,
             }),
           },
@@ -248,6 +262,35 @@ check('chat estimate returns a composed verdict', res.ok && res.verdict?.label =
 check('chat request used the chat default model', chatCalls[0]?.model === 'deepseek/deepseek-v4-flash', chatCalls[0]?.model);
 check('chat request used json_schema response format', chatCalls[0]?.response_format?.type === 'json_schema');
 check('chat request includes every taxonomy question in the prompt', String(chatCalls[0]?.messages?.[0]?.content).includes('larp_intensity'));
+
+// --- Strong tells: bait and slop floor the score past the bonus cap ---------
+const { composeVerdict, shouldShow } = await import('../lib/verdict.js');
+const { REQUIRED_NOULS } = await import('../lib/questions.js');
+const answersWith = (overrides, intensity = 0.5) => {
+  const answers = Object.fromEntries(REQUIRED_NOULS.map((id) => [id, { type: 'noul', noul: 0.1 }]));
+  for (const [id, v] of Object.entries(overrides)) answers[id] = { type: 'noul', noul: v };
+  answers.larp_intensity = { type: 'score', score: intensity, probabilities: { 0: 0.6, 1: 0.4 } };
+  return answers;
+};
+const showDefault = (v) => shouldShow(v, { sensitivity: 1.5 });
+
+const bait = composeVerdict(answersWith({ stat_farming: 0.9 }), { source: 'jev' });
+check('strong engagement bait → LARP shown at default sensitivity', bait?.kind === 'larp' && showDefault(bait), `${bait?.kind} ${bait?.score}`);
+const slop = composeVerdict(answersWith({ is_ai_written: 0.9 }), { source: 'jev' });
+check('AI slop with no work shown → LARP shown at default sensitivity', slop?.kind === 'larp' && showDefault(slop), `${slop?.kind} ${slop?.score}`);
+const bland = composeVerdict(answersWith({ is_ai_written: 0.9, work_shown: 0.9 }), { source: 'jev' });
+check('generic phrasing over real work is not floored', bland?.score < 3, `${bland?.kind} ${bland?.score}`);
+const askForHelp = composeVerdict(answersWith({ stat_farming: 0.9, sensitive_context: 0.9 }), { source: 'jev' });
+check('hardship post keeps its exemption despite bait', askForHelp?.kind === 'genuine', `${askForHelp?.kind} ${askForHelp?.score}`);
+const humble = composeVerdict(answersWith({ humblebrag: 0.9 }, 1), { source: 'jev' });
+check('humblebrag with nothing shown → LARP', humble?.kind === 'larp' && humble.details.some((d) => d.startsWith('Humblebrag')), `${humble?.kind} ${humble?.score}`);
+const bask = composeVerdict(answersWith({ basking: 0.9 }, 1), { source: 'jev' });
+check('name-dropping with no work shown → LARP', bask?.kind === 'larp', `${bask?.kind} ${bask?.score}`);
+const baskWithWork = composeVerdict(answersWith({ basking: 0.9, work_shown: 0.9 }, 0.5), { source: 'jev' });
+check('naming a real employer over real work stays REAL', baskWithWork?.kind === 'genuine', `${baskWithWork?.kind} ${baskWithWork?.score}`);
+const { analyzeHeuristically } = await import('../lib/heuristics.js');
+const h = analyzeHeuristically({ post_text: 'So exhausted from all the keynotes this month. Grateful, but my voice is gone. Who else is running on fumes?', author_headline: '' });
+check('heuristics flag a complaint-based humblebrag', h?.answers?.humblebrag?.noul > 0.7, String(h?.answers?.humblebrag?.noul));
 
 console.log(failures === 0 ? '\nAll smoke tests passed.' : `\n${failures} smoke test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

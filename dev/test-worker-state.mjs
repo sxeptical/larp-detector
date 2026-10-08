@@ -28,6 +28,13 @@ const nouls = (overrides = {}) => ({
   borrowed_content: 0.05,
   virtue_performance: 0.02,
   news_report: 0.05,
+  is_narrative: 0.2,
+  plain_update: 0.05,
+  sensitive_context: 0.02,
+  is_satire: 0.02,
+  manufactured_villain: 0.02,
+  humblebrag: 0.02,
+  basking: 0.02,
   ...overrides,
 });
 
