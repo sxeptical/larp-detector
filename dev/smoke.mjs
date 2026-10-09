@@ -186,6 +186,7 @@ check('coffee parable is shown at default sensitivity', res.show === true);
 
 res = await call({ type: 'ANALYZE_POST', post: HEADLINE_COSTUME });
 check('tech-larp + costume headline → LARP', res.verdict?.kind === 'larp' && res.verdict?.label === 'LARP', `${res.verdict?.label} ${res.verdict?.pct}%`);
+check('tech-larp + costume headline is shown', res.show === true, `${res.verdict?.pct}%`);
 
 // News relief: a relayed report is exempt from the persona/borrowed signals
 res = await call({ type: 'ANALYZE_POST', post: WIRE_SHARE });
@@ -288,6 +289,11 @@ const bask = composeVerdict(answersWith({ basking: 0.9 }, 1), { source: 'jev' })
 check('name-dropping with no work shown → LARP', bask?.kind === 'larp', `${bask?.kind} ${bask?.score}`);
 const baskWithWork = composeVerdict(answersWith({ basking: 0.9, work_shown: 0.9 }, 0.5), { source: 'jev' });
 check('naming a real employer over real work stays REAL', baskWithWork?.kind === 'genuine', `${baskWithWork?.kind} ${baskWithWork?.score}`);
+const costumeOverWork = composeVerdict(answersWith({ work_shown: 0.88, image_crafted: 0.17, headline_larp: 0.91, headline_supported: 0.17 }, 2), { source: 'jev' });
+check('costume headline over real work stays REAL', costumeOverWork?.kind === 'genuine' && costumeOverWork.details.some((d) => d.includes('early-career')), `${costumeOverWork?.kind} ${costumeOverWork?.score}`);
+const costumeOverNothing = composeVerdict(answersWith({ work_shown: 0.1, image_crafted: 0.6, headline_larp: 0.9, headline_supported: 0.1 }, 1.5), { source: 'jev' });
+check('costume headline over an empty post is LARP', costumeOverNothing?.kind === 'larp', `${costumeOverNothing?.kind} ${costumeOverNothing?.score}`);
+check('coin-flip LARP verdicts are hidden', !shouldShow({ kind: 'larp', pct: 45, score: 2.2 }, { sensitivity: 1.5 }));
 const { analyzeHeuristically } = await import('../lib/heuristics.js');
 const h = analyzeHeuristically({ post_text: 'So exhausted from all the keynotes this month. Grateful, but my voice is gone. Who else is running on fumes?', author_headline: '' });
 check('heuristics flag a complaint-based humblebrag', h?.answers?.humblebrag?.noul > 0.7, String(h?.answers?.humblebrag?.noul));

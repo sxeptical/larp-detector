@@ -118,10 +118,13 @@ function restrictStorageAccess() {
 /** Content scripts may ask for verdicts and public settings — nothing else. */
 const CONTENT_SCRIPT_MESSAGES = new Set(['ANALYZE_POST', 'GET_SETTINGS']);
 
+// The sender URL is what tells an extension page from a content script: a
+// content script reports the page it runs in (linkedin.com), an extension page
+// its own chrome-extension:// or moz-extension:// URL. `sender.tab` cannot be
+// used — the options page opens in a tab (options_ui.open_in_tab).
 function isExtensionPage(sender) {
   return (
     sender?.id === chrome.runtime.id &&
-    !sender.tab &&
     typeof sender.url === 'string' &&
     sender.url.startsWith(chrome.runtime.getURL(''))
   );

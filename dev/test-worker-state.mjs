@@ -207,6 +207,9 @@ for (const [layout, seed] of Object.entries(LAYOUTS)) {
   check('SET_SETTINGS refused for a content script', setFromCs.ok === false && w.store.get('larp_secrets').apiKey === KEYS.apiKey);
   const secretsFromOptions = await w.call({ type: 'GET_SECRETS' });
   check('GET_SECRETS works for extension pages', secretsFromOptions.ok && secretsFromOptions.secrets.apiKey === KEYS.apiKey);
+  // options_ui.open_in_tab: the options page messages from inside a tab.
+  const optionsInTab = await w.call({ type: 'GET_SECRETS' }, { url: `${EXT_URL}ui/options.html`, tab: { id: 3 } });
+  check('options page opened in a tab counts as an extension page', optionsInTab.ok && optionsInTab.secrets.apiKey === KEYS.apiKey);
 
   const stats = await w.call({ type: 'GET_STATS' });
   check('GET_STATS has no key material', !JSON.stringify(stats).includes('REAL_KEY'));
