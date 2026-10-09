@@ -8,7 +8,7 @@
 
 import { callJev, providerApiKey, resolveModel } from '../lib/jev-client.js';
 import { analyzeHeuristically } from '../lib/heuristics.js';
-import { composeVerdict, shouldShow, sponsoredVerdict, DEFAULT_SENSITIVITY } from '../lib/verdict.js';
+import { composeVerdict, shouldShow, sponsoredVerdict, DEFAULT_SENSITIVITY, COMPOSER_VERSION } from '../lib/verdict.js';
 
 const STORAGE_KEYS = {
   settings: 'larp_settings', // everything except the API keys
@@ -32,6 +32,8 @@ const CONCURRENCY = 3;
 
 /** Bump when the question set changes; invalidates the verdict cache. */
 const TAX_VERSION = 'tax-5';
+/** Cache key prefix: question set + composition rules (COMPOSER_VERSION). */
+const CACHE_VERSION = `${TAX_VERSION}.c${COMPOSER_VERSION}`;
 
 /** Verdicts produced because a provider call failed — shown, but never cached. */
 const FALLBACK_SOURCE = 'heuristic-fallback';
@@ -160,10 +162,10 @@ function engineTag(s) {
 }
 
 function cacheKey({ post_text, author_headline, media }, s) {
-  // TAX_VERSION rejects verdicts cached under an older question set — the
+  // CACHE_VERSION rejects verdicts cached under older questions or rules — the
   // composer requires the new nouls and old answers fail the missing-noul
   // check, which would silently disable badges for every cached post.
-  return `${TAX_VERSION}:${engineTag(s)}:${fnv1a(`${author_headline || ''}\u0000${post_text || ''}\u0000${media || ''}`)}`;
+  return `${CACHE_VERSION}:${engineTag(s)}:${fnv1a(`${author_headline || ''}\u0000${post_text || ''}\u0000${media || ''}`)}`;
 }
 
 async function ensureCacheLoaded() {
@@ -173,7 +175,7 @@ async function ensureCacheLoaded() {
   let dropped = 0;
   for (const [k, v] of Object.entries(obj)) {
     // Entries from an older key format or question set can never be hit again.
-    if (k.startsWith(`${TAX_VERSION}:`) && v?.verdict?.source !== FALLBACK_SOURCE) cache.set(k, v);
+    if (k.startsWith(`${CACHE_VERSION}:`) && v?.verdict?.source !== FALLBACK_SOURCE) cache.set(k, v);
     else dropped++;
   }
   cacheLoaded = true;
