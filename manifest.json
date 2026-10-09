@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LARP Detector for LinkedIn",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Marks LinkedIn posts REAL or LARP as you scroll. Flags humblebrags, engagement bait, and AI slop. Powered by Jev (TypeSafe).",
   "permissions": ["storage"],
   "host_permissions": [
