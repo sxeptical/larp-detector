@@ -24,6 +24,9 @@ cp -R $FILES "$STAGE/"
 node -e '
   const m = require("./manifest.json");
   m.background = { scripts: [m.background.service_worker], type: "module" };
+  // List LinkedIn under host_permissions too, so the install prompt asks for
+  // it and it is granted up front (content-script matches alone are optional).
+  m.host_permissions = [...new Set([...m.content_scripts.flatMap((c) => c.matches), ...m.host_permissions])];
   m.browser_specific_settings = {
     gecko: {
       id: "larp-detector@sxeptical",

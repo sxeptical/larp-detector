@@ -200,3 +200,32 @@ select {
   font-weight: 400;
   color: var(--muted);
 }
+
+.access[hidden] {
+  display: none;
+}
+.access {
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+.access__text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #b42318;
+}
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  .access {
+    background: rgba(217, 45, 32, 0.16);
+    border-color: rgba(253, 162, 155, 0.3);
+  }
+  .access__text { color: #fda29b; }
+}
