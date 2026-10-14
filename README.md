@@ -29,9 +29,10 @@ when a post is mostly image; hover for the full probability breakdown.
    open when you installed, reload it first — Chrome doesn't inject into
    existing tabs.
 
-Or install from the chrome web store or firefox addons:
-chrome: https://chromewebstore.google.com/detail/larp-detector-for-linkedi/ipdfclfipaoanbmdnbelelpbilkogdik?authuser=1&hl=en
-firefox: https://addons.mozilla.org/en-US/firefox/addon/larp-detector-for-linkedin/versions/
+Prefer a store install? Get the extension from
+[Chrome Web Store](https://chromewebstore.google.com/detail/larp-detector-for-linkedi/ipdfclfipaoanbmdnbelelpbilkogdik)
+or
+[Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/larp-detector-for-linkedin/versions/).
 
 No key yet? Set provider to **Mock** — the heuristics engine runs the whole
 pipeline offline so you can develop and demo without the API. In mock mode,
