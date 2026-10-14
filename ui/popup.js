@@ -60,7 +60,23 @@ $('provider').addEventListener('change', (e) => {
 $('options').addEventListener('click', () => chrome.runtime.openOptionsPage());
 $('clear').addEventListener('click', async () => {
   await send({ type: 'CLEAR_CACHE' });
-  refresh();
+  // Firefox MV3 treats content-script hosts as optional: until the user allows
+// linkedin.com, the content script never injects and no badges appear.
+const LINKEDIN = { origins: ['https://www.linkedin.com/*'] };
+
+async function checkAccess() {
+  if (!chrome.permissions?.contains) return;
+  const granted = await chrome.permissions.contains(LINKEDIN).catch(() => true);
+  $('access').hidden = granted;
+}
+
+// Must stay synchronous up to request(): it needs the click's user gesture.
+$('grant').addEventListener('click', () => {
+  chrome.permissions.request(LINKEDIN).then(checkAccess, checkAccess);
+});
+
+refresh();
+checkAccess();
 });
 
 refresh();

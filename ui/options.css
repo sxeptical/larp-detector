@@ -156,3 +156,8 @@ select {
 .result--bad {
   border-color: #dc2626;
 }
+
+a.btn {
+  display: inline-block;
+  text-decoration: none;
+}
