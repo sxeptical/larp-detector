@@ -125,45 +125,48 @@
   pointer-events: none;
   border-radius: inherit;
   overflow: hidden;
-  background: rgba(217, 45, 32, 0.1);
-  animation: larp-stamp-wash 2.4s ease forwards;
+  background: transparent;
 }
+/* Base state is the settled top-strip stamp (also used under reduced motion) */
 .larp-stamp::after {
   content: attr(data-stamp);
   position: absolute;
-  top: 26%;
-  left: 50%;
-  padding: 2px 22px;
-  border: 6px solid #d92d20;
-  border-radius: 10px;
+  top: 10px;
+  right: 220px;
+  padding: 0 8px;
+  border: 2px solid #d92d20;
+  border-radius: 4px;
   color: #d92d20;
   font-family: Impact, 'Arial Black', 'Helvetica Neue', sans-serif;
-  font-size: 64px;
+  font-size: 20px;
   font-weight: 900;
   letter-spacing: 0.08em;
   line-height: 1.05;
-  /* solid ink: inner ring + slight ink bleed */
-  box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #d92d20, 0 0 1px #d92d20;
   text-shadow: 0 0 1px #d92d20;
   background: rgba(255, 255, 255, 0.85);
-  transform: translate(-50%, 0) rotate(-12deg);
-  opacity: 1;
-  animation: larp-stamp-slam 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both,
-    larp-stamp-settle 0.6s ease 1.8s forwards;
-}
-/* After the slam: a small faded stamp stays top-left so the post is readable */
-.larp-stamp.is-settled::after {
-  animation: none;
-  top: 10px;
-  left: auto;
-  right: 220px;
-  font-size: 20px;
-  padding: 0 8px;
-  border-width: 2px;
-  border-radius: 4px;
-  box-shadow: none;
   transform: rotate(-8deg);
   opacity: 0.8;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .larp-stamp:not(.is-settled) {
+    background: rgba(217, 45, 32, 0.1);
+    animation: larp-stamp-wash 2.4s ease forwards;
+  }
+  .larp-stamp:not(.is-settled)::after {
+    top: 26%;
+    left: 50%;
+    right: auto;
+    padding: 2px 22px;
+    border-width: 6px;
+    border-radius: 10px;
+    font-size: 64px;
+    /* solid ink: inner ring + slight ink bleed */
+    box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #d92d20, 0 0 1px #d92d20;
+    transform: translate(-50%, 0) rotate(-12deg);
+    opacity: 1;
+    animation: larp-stamp-slam 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both,
+      larp-stamp-settle 0.6s ease 1.8s forwards;
+  }
 }
 
 @keyframes larp-stamp-slam {
@@ -183,13 +186,12 @@
     border-color: #f97066;
     color: #f97066;
     background: rgba(31, 32, 36, 0.85);
-    box-shadow: inset 0 0 0 3px #1f2024, inset 0 0 0 5px #f97066;
   }
-}
-@media (prefers-reduced-motion: reduce) {
-  .larp-stamp,
-  .larp-stamp::after { animation: none; }
-  .larp-stamp { background: transparent; }
+  @media (prefers-reduced-motion: no-preference) {
+    .larp-stamp:not(.is-settled)::after {
+      box-shadow: inset 0 0 0 3px #1f2024, inset 0 0 0 5px #f97066;
+    }
+  }
 }
 @media (max-width: 600px) {
   .larp-stamp.is-settled::after { display: none; }

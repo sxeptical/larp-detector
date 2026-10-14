@@ -220,6 +220,49 @@ for (const [layout, seed] of Object.entries(LAYOUTS)) {
   const pushed = w.tabMessages.find((m) => m.message.type === 'SETTINGS_CHANGED');
   check('settings changes are pushed to tabs', pushed?.message.settings.sensitivity === 1);
   check('...without key material', !JSON.stringify(w.tabMessages).includes('REAL_KEY'));
+
+  w.tabMessages.length = 0;
+  await w.call({ type: 'CLEAR_CACHE' });
+  const cleared = w.tabMessages.find((m) => m.message.type === 'CACHE_CLEARED');
+  check('CLEAR_CACHE notifies open tabs', Boolean(cleared));
+}
+
+// 6. CLEAR_CACHE in-flight guard ---------------------------------------------
+{
+  const w = await wake({ stored: { larp_settings: { ...LIVE_SETTINGS, sensitivity: 0 }, larp_secrets: KEYS } });
+  const resolvers = [];
+  globalThis.fetch = () =>
+    new Promise((resolve) => {
+      w.fetchCalls++;
+      resolvers.push(() => resolve(new Response(JSON.stringify(jevResponse()), { status: 200 })));
+    });
+
+  // Start request 1 (in flight)
+  const p1 = w.call({ type: 'ANALYZE_POST', post: POST }, CONTENT_SCRIPT);
+  await delay(10);
+  check('request 1 started fetch #1', w.fetchCalls === 1);
+
+  // Clear cache while request 1 is in flight, then start request 2 for the same post
+  await w.call({ type: 'CLEAR_CACHE' });
+  const p2 = w.call({ type: 'ANALYZE_POST', post: POST }, CONTENT_SCRIPT);
+  await delay(10);
+  check('request 2 started fetch #2 after CLEAR_CACHE', w.fetchCalls === 2);
+
+  // Finish request 1 first — its .finally() must NOT delete request 2 from inflight
+  resolvers[0]();
+  await p1;
+  const statsMid = await w.call({ type: 'GET_STATS' });
+  check('pre-clear in-flight request does not write back to cache', statsMid.stats.cacheSize === 0);
+
+  // Request 3 arrives while request 2 is still in flight — must dedupe onto request 2
+  const p3 = w.call({ type: 'ANALYZE_POST', post: POST }, CONTENT_SCRIPT);
+  await delay(10);
+  check('settled pre-clear request did not evict request 2 from inflight', w.fetchCalls === 2, `fetchCalls=${w.fetchCalls}`);
+
+  resolvers[1]();
+  await Promise.all([p2, p3]);
+  const statsAfter = await w.call({ type: 'GET_STATS' });
+  check('post-clear request writes to cache once settled', statsAfter.stats.cacheSize === 1);
 }
 
 console.log(failures === 0 ? '\nAll worker-state tests passed.' : `\n${failures} worker-state test(s) FAILED.`);

@@ -151,11 +151,13 @@
   }
 
   /**
-   * The worker pushes settings changes here. Content scripts have no access to
-   * chrome.storage (the API keys live there), so there is no onChanged to use.
+   * The worker pushes settings and cache changes here. Content scripts have no
+   * access to chrome.storage (the API keys live there), so there is no
+   * onChanged to use.
    */
   function onRuntimeMessage(msg) {
     if (msg?.type === 'SETTINGS_CHANGED' && msg.settings) applySettings(msg.settings);
+    if (msg?.type === 'CACHE_CLEARED') clearPageCache();
   }
 
   function applySettings(next) {
@@ -166,8 +168,13 @@
     } else if (!wasEnabled) {
       scan();
     } else {
-      rescanVisible(); // sensitivity / showGenuine changed
+      rescanVisible(); // sensitivity / showGenuine / provider / model changed
     }
+  }
+
+  function clearPageCache() {
+    verdictByUrn.clear();
+    verdictByText.clear();
   }
 
   function getSettings() {
@@ -256,9 +263,13 @@
     }
   }
 
+  /** Only badge the outermost activity node — reshares nest one inside another. */
+  function isNestedPost(el) {
+    return Boolean(el.parentElement?.closest(POST_SELECTOR));
+  }
+
   function observePost(el) {
-    // Only badge the outermost activity node — reshares nest one inside another.
-    if (el.parentElement?.closest(POST_SELECTOR)) return;
+    if (isNestedPost(el)) return;
     if (!el.dataset.larpObserved) {
       el.dataset.larpObserved = '1';
       debug.observed++;
@@ -269,7 +280,9 @@
   }
 
   function rescanVisible() {
+    clearPageCache();
     for (const el of document.querySelectorAll(POST_SELECTOR)) {
+      analyzedNodeUrn.delete(el);
       if (isInViewport(el)) onPostVisible(el, true);
     }
   }
@@ -431,6 +444,7 @@
   // Analysis flow
   // -------------------------------------------------------------------------
   function onPostVisible(el, force = false) {
+    if (isNestedPost(el)) return;
     const urn = urnOf(el);
     if (!urn) return;
     debug.visible++;
@@ -567,8 +581,8 @@
   /**
    * Place the badge at the top-right of the post card — over the header strip,
    * which always has the card's own background (never an image), so the pill
-   * stays legible on media-heavy posts. The 44px offset clears LinkedIn's
-   * "…" menu and the Suggested dismiss button.
+   * stays legible on media-heavy posts. The 96px offset clears LinkedIn's
+   * Follow button, "…" menu, and Suggested dismiss button.
    */
   function insertBadge(el, badge) {
     el.classList.add('larp-post-anchor');
@@ -588,32 +602,32 @@
   }
 
   function applyVerdict(el, urn, verdict, show, opts = {}) {
+    removeBadge(el, urn, 'analyzing');
+
+    if (opts.store) {
+      verdictByUrn.set(urn, { verdict, show: Boolean(verdict && show) });
+      if (opts.textKey && verdict) verdictByText.set(opts.textKey, { verdict, show: Boolean(show) });
+    }
+
+    if (!verdict || !show) {
+      removeBadge(el, urn, 'verdict');
+      return;
+    }
+
     // Idempotence: the 3s scan re-visits visible posts. If the badge already
     // shows this exact verdict, do nothing — no re-render, no re-animation.
     const existing = [...badgesOf(el)].find(
       (b) => b.dataset.urn === urn && b.dataset.kind === 'verdict'
     );
-    if (existing && verdict && show) {
-      if (
-        existing.dataset.label === verdict.label &&
-        existing.dataset.pct === String(verdict.pct ?? '')
-      ) {
-        return;
-      }
-    }
-
-    removeBadge(el, urn, 'analyzing');
-    removeBadge(el, urn, 'verdict');
-
-    if (!verdict || !show) {
-      if (opts.store) verdictByUrn.set(urn, { verdict, show: false });
+    if (
+      existing &&
+      existing.dataset.label === verdict.label &&
+      existing.dataset.pct === String(verdict.pct ?? '')
+    ) {
       return;
     }
 
-    if (opts.store) {
-      verdictByUrn.set(urn, { verdict, show });
-      if (opts.textKey && verdict) verdictByText.set(opts.textKey, { verdict, show });
-    }
+    removeBadge(el, urn, 'verdict');
 
     const tone = verdict.kind === 'genuine' ? 'real' : verdict.kind === 'sponsored' ? 'sponsored' : 'larp';
     const badge = document.createElement('div');
@@ -669,9 +683,13 @@
       pct: badge.dataset.pct,
       stamp: 'LARP',
     });
-    stamp.addEventListener('animationend', (e) => {
-      if (e.animationName === 'larp-stamp-settle') stamp.classList.add('is-settled');
-    });
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      stamp.classList.add('is-settled');
+    } else {
+      stamp.addEventListener('animationend', (e) => {
+        if (e.animationName === 'larp-stamp-settle') stamp.classList.add('is-settled');
+      });
+    }
     return stamp;
   }
 
@@ -751,8 +769,7 @@
   function removeAllBadges() {
     hideHoverCard();
     for (const badge of document.querySelectorAll('.larp-badge')) disposeBadge(badge);
-    verdictByUrn.clear();
-    verdictByText.clear();
+    clearPageCache();
     for (const el of document.querySelectorAll(POST_SELECTOR)) {
       analyzedNodeUrn.delete(el);
       delete el.dataset.larpObserved;
