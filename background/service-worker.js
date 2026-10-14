@@ -92,18 +92,21 @@ function publicSettings() {
 
 /**
  * Content scripts can't read chrome.storage (see restrictStorageAccess), so
- * the worker pushes changes to open tabs. Tabs without our content script
- * reject the message; that's expected.
+ * the worker pushes state changes to open tabs. Tabs without our content
+ * script reject the message; that's expected.
  */
-async function broadcastSettings() {
-  const message = { type: 'SETTINGS_CHANGED', settings: publicSettings() };
+async function broadcastToTabs(message) {
   try {
     for (const tab of await chrome.tabs.query({})) {
       if (tab.id != null) chrome.tabs.sendMessage(tab.id, message).catch(() => {});
     }
   } catch (err) {
-    console.warn('[LARP] could not broadcast settings:', err);
+    console.warn('[LARP] could not broadcast to tabs:', err);
   }
+}
+
+function broadcastSettings() {
+  return broadcastToTabs({ type: 'SETTINGS_CHANGED', settings: publicSettings() });
 }
 
 /** Keep content scripts, which run next to LinkedIn's page, out of storage.local entirely. */
@@ -289,20 +292,20 @@ async function analyzePost(post) {
   const wasCached = Boolean(entry);
   if (!entry) {
     if (!inflight.has(key)) {
-      inflight.set(
-        key,
-        enqueue(() => analyzeRaw(post, snapshot))
-          .then((result) => {
-            if (!result) return null;
-            const verdict = composeVerdict(result.answers, {
-              model: result.model,
-              usage: result.usage,
-              source: result.source,
-            });
-            return verdict ? { verdict, ts: Date.now(), model: result.model } : null;
-          })
-          .finally(() => inflight.delete(key))
-      );
+      const promise = enqueue(() => analyzeRaw(post, snapshot))
+        .then((result) => {
+          if (!result) return null;
+          const verdict = composeVerdict(result.answers, {
+            model: result.model,
+            usage: result.usage,
+            source: result.source,
+          });
+          return verdict ? { verdict, ts: Date.now(), model: result.model } : null;
+        })
+        .finally(() => {
+          if (inflight.get(key) === promise) inflight.delete(key);
+        });
+      inflight.set(key, promise);
     }
     entry = await inflight.get(key);
     // A fallback verdict means the provider hiccuped; caching it would pin the
@@ -378,6 +381,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           clearTimeout(persistTimer);
           cache.clear();
           await chrome.storage.local.remove(STORAGE_KEYS.cache);
+          broadcastToTabs({ type: 'CACHE_CLEARED' });
           sendResponse({ ok: true });
           break;
         }

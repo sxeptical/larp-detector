@@ -101,10 +101,13 @@ Design decisions worth knowing:
   moralizing) rides on the post — a news link wrapped in a take is still
   judged as the take. Exempt posts are REAL, so they only badge when
   "Also badge the REAL ONEs" is on.
-- **Badges are status pills pinned to the top-right of the post header.** No
-  emoji, no animations for now — they render once and stay while you scroll.
-  The 96px right-offset keeps them clear of LinkedIn's own dismiss/menu/Follow
-  buttons (see the measurements in `content/content.css`).
+- **Badges are status pills pinned to the top-right of the post header, plus a
+  rubber stamp on LARP posts.** The 96px right-offset keeps the pill clear of
+  LinkedIn's own dismiss/menu/Follow buttons (see the measurements in
+  `content/content.css`). LARP verdicts also slam a `LARP` stamp across the card
+  that settles into the header strip after 1.8s (under
+  `prefers-reduced-motion`, the slam animation is skipped and the stamp starts
+  settled).
 - **API keys stay in the service worker.** They live under their own storage key
   (`larp_secrets`), `chrome.storage.local` is closed to content scripts
   (`setAccessLevel`), and the worker only hands keys to the options page —
@@ -132,7 +135,8 @@ OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter     # through Je
 OPENROUTER_API_KEY=... node dev/preview.mjs --live --openrouter-chat # through the chat-model estimate
 node dev/smoke.mjs            # integration test: real service worker, mocked endpoints
 node dev/test-worker-state.mjs  # worker state: cold start, failure caching, cache keys, key isolation
-npm test                      # headline parser + smoke + worker-state
+node dev/test-content-script.mjs  # content script: reshares, cache clear, rescans, reduced-motion stamp
+npm test                      # headline parser + smoke + worker-state + content-script
 node dev/test-headline-parser.mjs   # headline parser vs lines sampled from the live feed
 ```
 
