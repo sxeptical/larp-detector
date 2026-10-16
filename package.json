@@ -1,7 +1,7 @@
 {
   "name": "larp-detector",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Dev tooling for the LARP Detector Chrome extension. Not used by the extension itself \u2014 Chrome ignores this file.",
   "type": "module",
   "scripts": {
