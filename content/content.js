@@ -66,6 +66,7 @@
   let mutationObserver = null;
   let mutationTimer = null;
   let scanTimer = null;
+  let tornDown = false;
   let localAnalyzerPromise = null;
 
   /** Debug counters — read from the console or the browser-control test harness. */
@@ -146,8 +147,7 @@
     setupIntersectionObserver();
     setupMutationObserver();
     patchHistory();
-    scan();
-    scanTimer = setInterval(scan, SCAN_INTERVAL_MS);
+    scan(); // starts the periodic scan if this page has posts
   }
 
   /**
@@ -245,22 +245,44 @@
   }
 
   function feedRoots() {
-    const roots = [];
+    const unique = new Set();
     for (const sel of SELECTORS.feedRoots) {
-      for (const root of document.querySelectorAll(sel)) roots.push(root);
+      for (const root of document.querySelectorAll(sel)) unique.add(root);
     }
-    return roots.length ? roots : [document.body];
+    const roots = [...unique];
+    // `main` usually wraps the feed root; scanning both would visit every post twice.
+    const outermost = roots.filter((r) => !roots.some((o) => o !== r && o.contains(r)));
+    return outermost.length ? outermost : [document.body];
   }
 
   function scan() {
-    if (!settings.enabled) return;
+    if (!settings.enabled) {
+      stopScanTimer();
+      return;
+    }
     debug.scans++;
     debug.lastScanAt = Date.now();
+    let found = 0;
     for (const root of feedRoots()) {
       for (const el of root.querySelectorAll(POST_SELECTOR)) {
+        found++;
         observePost(el);
       }
     }
+    // The periodic scan only catches recycled nodes, so it idles on pages with
+    // no posts (messaging, settings…). The mutation observer and history patch
+    // call scan() again once posts appear.
+    if (found) startScanTimer();
+    else stopScanTimer();
+  }
+
+  function startScanTimer() {
+    if (!scanTimer && !tornDown) scanTimer = setInterval(scan, SCAN_INTERVAL_MS);
+  }
+
+  function stopScanTimer() {
+    clearInterval(scanTimer);
+    scanTimer = null;
   }
 
   /** Only badge the outermost activity node — reshares nest one inside another. */
@@ -781,8 +803,8 @@
   // -------------------------------------------------------------------------
   /** Lets a test harness (or a session teardown) stop this instance cleanly. */
   window.__larpTeardown = () => {
-    clearInterval(scanTimer);
-    scanTimer = null;
+    tornDown = true;
+    stopScanTimer();
     intersectionObserver?.disconnect();
     mutationObserver?.disconnect();
     try {
@@ -792,12 +814,8 @@
     }
   };
 
-  window.addEventListener('pagehide', () => {
-    clearInterval(scanTimer);
-    scanTimer = null;
-  });
+  window.addEventListener('pagehide', stopScanTimer);
   window.addEventListener('pageshow', () => {
-    if (!scanTimer) scanTimer = setInterval(scan, SCAN_INTERVAL_MS);
-    scheduleScan();
+    if (!tornDown) scheduleScan(); // restarts the periodic scan if there are posts
   });
 })();

@@ -73,7 +73,11 @@ function makeEl(tag = 'div', attrs = {}) {
       }
       return false;
     },
-    closest: (sel) => {
+    contains: (other) => {
+    for (let cur = other; cur; cur = cur.parentElement) if (cur === el) return true;
+    return false;
+  },
+  closest: (sel) => {
       let cur = el;
       while (cur) {
         if (cur.matches?.(sel)) return cur;
@@ -115,7 +119,11 @@ function makePostCard(urn, text, { top = 100, bottom = 300 } = {}) {
   return card;
 }
 
+// <main> wraps the feed root, as on the live site: both match SELECTORS.feedRoots.
+const main = makeEl('main');
 const root = makeEl('div');
+main.appendChild(root);
+const FEED_ROOTS = { '[data-testid="mainFeed"]': [root], main: [main] };
 const outerReshare = makePostCard('update-card-focus-outer', 'Outer reshare commentary that is definitely over twenty chars.');
 const innerReshare = makePostCard('update-card-focus-inner', 'Inner reshared post text that is also over twenty characters long.');
 outerReshare.appendChild(innerReshare);
@@ -134,16 +142,17 @@ const analyzedUrns = [];
 let currentShow = true;
 
 globalThis.Node = { ELEMENT_NODE: 1 };
+const windowListeners = {};
 globalThis.window = {
   innerHeight: 800,
   innerWidth: 1200,
-  addEventListener: () => {},
+  addEventListener: (ev, fn) => (windowListeners[ev] = fn),
   matchMedia: () => ({ matches: reducedMotion }),
 };
 globalThis.document = {
-  body: root,
+  body: main,
   createElement: (tag) => makeEl(tag),
-  querySelectorAll: (sel) => root.querySelectorAll(sel),
+  querySelectorAll: (sel) => FEED_ROOTS[sel] ?? main.querySelectorAll(sel),
 };
 globalThis.history = { pushState: () => {}, replaceState: () => {} };
 globalThis.requestIdleCallback = (fn) => fn();
@@ -154,10 +163,30 @@ globalThis.IntersectionObserver = class {
   observe() {}
   disconnect() {}
 };
+let mutationCallback = null;
 globalThis.MutationObserver = class {
+  constructor(cb) {
+    mutationCallback = cb;
+  }
   observe() {}
   disconnect() {}
 };
+// Track the content script's periodic scan.
+const activeIntervals = new Set();
+let intervalFn = null;
+const realSetInterval = globalThis.setInterval;
+const realClearInterval = globalThis.clearInterval;
+globalThis.setInterval = (fn, ms) => {
+  const id = realSetInterval(fn, ms);
+  activeIntervals.add(id);
+  intervalFn = fn;
+  return id;
+};
+globalThis.clearInterval = (id) => {
+  activeIntervals.delete(id);
+  realClearInterval(id);
+};
+
 globalThis.chrome = {
   runtime: {
     id: 'test-ext',
@@ -188,6 +217,12 @@ await delay(20);
 check('reshare: only outer post is analyzed on initial scan', analyzedUrns.length === 1 && analyzedUrns[0] === 'update-card-focus-outer', analyzedUrns.join(','));
 const stamps = outerReshare.querySelectorAll('.larp-badge').filter((b) => b.classList.contains('larp-stamp'));
 check('reduced-motion stamp starts settled immediately', stamps.length === 1 && stamps[0].classList.contains('is-settled'));
+check('periodic scan runs while the page has posts', activeIntervals.size === 1);
+
+// Nested feed roots (<main> around the feed) must not visit each post twice per scan
+const visibleBefore = window.__larpDebug.visible;
+intervalFn();
+check('a scan visits each visible post once despite nested feed roots', window.__larpDebug.visible - visibleBefore === 1, `visits=${window.__larpDebug.visible - visibleBefore}`);
 
 const initialStamp = stamps[0];
 analyzedUrns.length = 0;
@@ -220,7 +255,22 @@ ioCallback([{ isIntersecting: true, target: offscreenPost }]);
 check('off-screen post is analyzed when scrolled into view', analyzedUrns.includes('update-card-focus-offscreen'));
 check('off-screen post respects updated show=false setting', offscreenPost.querySelectorAll('.larp-badge').length === 0);
 
+// Page without posts (messaging, settings…): the periodic scan stops
+outerReshare.remove();
+offscreenPost.remove();
+intervalFn();
+check('periodic scan stops on a page with no posts', activeIntervals.size === 0);
+
+// Posts appear again (SPA navigation back to the feed): the mutation observer restarts it
+root.appendChild(outerReshare);
+mutationCallback([{ addedNodes: [outerReshare] }]);
+await delay(300);
+check('periodic scan restarts when posts appear', activeIntervals.size === 1);
+
 globalThis.window.__larpTeardown?.();
+check('teardown stops the periodic scan', activeIntervals.size === 0);
+windowListeners.pageshow?.();
+check('pageshow after teardown does not restart the scan', activeIntervals.size === 0);
 
 console.log(failures === 0 ? '\nAll content-script tests passed.' : `\n${failures} content-script test(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);
