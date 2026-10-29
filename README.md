@@ -187,3 +187,4 @@ python3 dev/make-icons.py
   liking, or scraping. Personal-use tool.
 - Badges are judgments, not verdicts. The tooltip always shows the full
   probability breakdown so you can tell when Jev is unsure.
+
