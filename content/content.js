@@ -61,6 +61,10 @@
   const verdictByText = new Map();
   /** node -> urn last analyzed for that node (nodes get recycled) */
   const analyzedNodeUrn = new WeakMap();
+  /** node -> { urn, tries } for cards seen before their text rendered */
+  const textlessTries = new WeakMap();
+  /** Rescans (3s apart) to wait for a card's text before giving up on it. */
+  const MAX_TEXTLESS_TRIES = 5;
 
   let intersectionObserver = null;
   let mutationObserver = null;
@@ -305,6 +309,7 @@
     clearPageCache();
     for (const el of document.querySelectorAll(POST_SELECTOR)) {
       analyzedNodeUrn.delete(el);
+      textlessTries.delete(el);
       if (isInViewport(el)) onPostVisible(el, true);
     }
   }
@@ -475,7 +480,14 @@
     purgeStaleBadges(el, urn);
 
     const lastUrn = analyzedNodeUrn.get(el);
-    if (!force && lastUrn === urn) return;
+    if (!force && lastUrn === urn) {
+      // LinkedIn re-renders card contents in place and can drop our pill with
+      // them; the id stays the same, so restore it from the page map.
+      const known = verdictByUrn.get(urn);
+      if (known?.show && !hasVerdictBadge(el, urn)) applyVerdict(el, urn, known.verdict, known.show);
+      else placeBadges(el);
+      return;
+    }
 
     // Instant re-badge from the per-page map.
     const known = verdictByUrn.get(urn);
@@ -487,16 +499,25 @@
     const post = extractPost(el);
     if (!post) return;
 
-    analyzedNodeUrn.set(el, urn);
-
     if (post.isPromoted) {
+      analyzedNodeUrn.set(el, urn);
       applyVerdict(el, urn, sponsored(), true, { store: true });
       return;
     }
     if (!post.post_text || post.post_text.trim().length < 20) {
+      // LinkedIn renders the card shell before the post text. Leave the card
+      // unmarked so the periodic scan retries it, but stop after a few tries
+      // for posts that really have no text (image-only, polls).
+      const prev = textlessTries.get(el);
+      const tries = prev?.urn === urn ? prev.tries + 1 : 1;
+      textlessTries.set(el, { urn, tries });
+      if (tries >= MAX_TEXTLESS_TRIES) analyzedNodeUrn.set(el, urn);
       debug.skipped++;
       return;
     }
+
+    analyzedNodeUrn.set(el, urn);
+    textlessTries.delete(el);
 
     // Same post rendered as a fresh card (new componentkey)? Re-badge from the
     // text cache without another analysis round-trip. Hash a normalized prefix:
@@ -600,16 +621,62 @@
     }
   }
 
+  function hasVerdictBadge(el, urn) {
+    return [...badgesOf(el)].some((b) => b.dataset.urn === urn && b.dataset.kind === 'verdict' && !b.classList.contains('larp-stamp'));
+  }
+
   /**
    * Place the badge at the top-right of the post card — over the header strip,
    * which always has the card's own background (never an image), so the pill
-   * stays legible on media-heavy posts. The 96px offset clears LinkedIn's
-   * Follow button, "…" menu, and Suggested dismiss button.
+   * stays legible on media-heavy posts.
    */
   function insertBadge(el, badge) {
     el.classList.add('larp-post-anchor');
     badge.dataset.anchor = 'top-right';
     el.appendChild(badge);
+    placeBadges(el);
+  }
+
+  // The pill's row inside the card (content.css: top 8px, height 20px), and
+  // the fallback offset that clears the dismiss "x" and "…" menu alone.
+  const PILL_ROW = { top: 8, bottom: 28 };
+  const PILL_GAP = 8;
+  const PILL_MIN_RIGHT = 96;
+  const HEADER_CONTROLS = 'button, a[href], [role="button"]';
+
+  /**
+   * How far from the card's right edge the pill must sit to clear LinkedIn's
+   * own controls on its row. Which controls share that row varies: Follow
+   * sits beside "…" and the dismiss "x" on some cards and on a second row on
+   * others, so it's measured per card instead of hard-coded.
+   */
+  function pillRightOffset(el) {
+    const card = el.getBoundingClientRect();
+    if (!card.width) return PILL_MIN_RIGHT;
+    const rowTop = card.top + PILL_ROW.top;
+    const rowBottom = card.top + PILL_ROW.bottom;
+    let right = PILL_MIN_RIGHT;
+    for (const control of el.querySelectorAll(HEADER_CONTROLS)) {
+      if (control.closest('.larp-badge')) continue;
+      const r = control.getBoundingClientRect();
+      if (!r.width || !r.height) continue; // hidden
+      if (r.bottom <= rowTop || r.top >= rowBottom) continue; // not on the pill's row
+      if (r.left < card.left + card.width / 2) continue; // the author side of the header
+      right = Math.max(right, Math.ceil(card.right - r.left) + PILL_GAP);
+    }
+    return right;
+  }
+
+  /** Re-measured on every rescan: Follow renders late and changes width once clicked. */
+  function placeBadges(el) {
+    const badges = [...badgesOf(el)];
+    if (!badges.length) return;
+    const right = `${pillRightOffset(el)}px`;
+    for (const badge of badges) {
+      if (badge.style.getPropertyValue?.('--larp-pill-right') !== right) {
+        badge.style.setProperty?.('--larp-pill-right', right);
+      }
+    }
   }
 
   function showAnalyzing(el, urn) {
@@ -646,6 +713,7 @@
       existing.dataset.label === verdict.label &&
       existing.dataset.pct === String(verdict.pct ?? '')
     ) {
+      placeBadges(el);
       return;
     }
 
@@ -684,8 +752,8 @@
     }
 
     attachHoverCard(badge, verdict, tone);
-    insertBadge(el, badge);
     if (tone === 'larp') el.appendChild(stampFor(badge));
+    insertBadge(el, badge);
   }
 
   /**

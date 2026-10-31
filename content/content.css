@@ -8,9 +8,12 @@
  * Placement inside the card, measured against LinkedIn's own controls:
  *   dismiss "x"      right  5-37px, top 3-35px
  *   "..." menu       right 37-69px, top 3-35px
- *   Follow button    right  5-85px, top 38-86px
- * The badge at top: 8px / right: 96px clears all of them (96 keeps an ~11px
- * gap from the Follow button's left edge).
+ *   Follow button    right  5-85px, top 38-86px on some cards; on others it
+ *                    shares the top row, left of "..."
+ * The badge sits at top: 8px. Its right offset, --larp-pill-right, is
+ * measured per card by content.js (placeBadges) to clear whatever controls
+ * share its row; 96px, which clears "x" and "...", is the floor and fallback.
+ * The settled stamp keeps its 124px lead over the pill.
  */
 
 .larp-post-anchor {
@@ -74,7 +77,7 @@
 .larp-badge:not(.larp-stamp) {
   position: absolute !important;
   top: 8px;
-  right: 96px;
+  right: var(--larp-pill-right, 96px);
   z-index: 6;
 
   display: inline-flex;
@@ -132,7 +135,7 @@
   content: attr(data-stamp);
   position: absolute;
   top: 10px;
-  right: 220px;
+  right: calc(var(--larp-pill-right, 96px) + 124px);
   padding: 0 8px;
   border: 2px solid #d92d20;
   border-radius: 4px;

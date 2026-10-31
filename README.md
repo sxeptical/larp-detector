@@ -107,9 +107,10 @@ Design decisions worth knowing:
   judged as the take. Exempt posts are REAL, so they only badge when
   "Also badge the REAL ONEs" is on.
 - **Badges are status pills pinned to the top-right of the post header, plus a
-  rubber stamp on LARP posts.** The 96px right-offset keeps the pill clear of
-  LinkedIn's own dismiss/menu/Follow buttons (see the measurements in
-  `content/content.css`). LARP verdicts also slam a `LARP` stamp across the card
+  rubber stamp on LARP posts.** The pill's right offset is measured per card
+  to clear whichever of LinkedIn's dismiss/menu/Follow buttons share its row
+  (Follow sits beside the menu on some cards, below it on others), with 96px
+  as the floor; see `content/content.css`. LARP verdicts also slam a `LARP` stamp across the card
   that settles into the header strip after 1.8s (under
   `prefers-reduced-motion`, the slam animation is skipped and the stamp starts
   settled).

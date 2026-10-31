@@ -8,6 +8,8 @@
  *  - CACHE_CLEARED forgets page verdicts without re-analyzing or re-slamming
  *  - SETTINGS_CHANGED rescans visible posts; off-screen posts re-evaluate on scroll
  *  - under prefers-reduced-motion the LARP stamp starts settled
+ *  - the pill clears LinkedIn controls on its row, measured per card
+ *  - pills dropped by a LinkedIn re-render come back; textless cards are retried
  */
 
 const EXT_URL = 'chrome-extension://test/';
@@ -27,7 +29,15 @@ function makeEl(tag = 'div', attrs = {}) {
     nodeType: 1,
     tagName: tag.toUpperCase(),
     dataset: {},
-    style: {},
+    style: {
+      _props: {},
+      setProperty(k, v) {
+        this._props[k] = v;
+      },
+      getPropertyValue(k) {
+        return this._props[k] ?? '';
+      },
+    },
     parentElement: null,
     innerText: '',
     textContent: '',
@@ -93,7 +103,8 @@ function makeEl(tag = 'div', attrs = {}) {
           if (
             (sel === '.larp-badge' && ch.classList.contains('larp-badge')) ||
             (sel.includes('update-card-focus') && ch.matches(sel)) ||
-            (sel === '[data-testid="expandable-text-box"]' && ch.getAttribute('data-testid') === 'expandable-text-box')
+            (sel === '[data-testid="expandable-text-box"]' && ch.getAttribute('data-testid') === 'expandable-text-box') ||
+            (sel.startsWith('button,') && ch.tagName === 'BUTTON')
           ) {
             out.push(ch);
           }
@@ -254,6 +265,61 @@ offscreenPost._bottom = 300;
 ioCallback([{ isIntersecting: true, target: offscreenPost }]);
 check('off-screen post is analyzed when scrolled into view', analyzedUrns.includes('update-card-focus-offscreen'));
 check('off-screen post respects updated show=false setting', offscreenPost.querySelectorAll('.larp-badge').length === 0);
+
+// Pill placement: clear LinkedIn controls that share the pill's row ----------
+currentShow = true;
+const pillOf = (card) => card.querySelectorAll('.larp-badge').find((b) => b.dataset.kind === 'verdict' && !b.classList.contains('larp-stamp'));
+const rect = (left, top, width, height) => () => ({ left, top, width, height, right: left + width, bottom: top + height });
+{
+  const card = makePostCard('update-card-focus-follow-row', 'A post whose Follow button shares the top row with the menu.');
+  card.getBoundingClientRect = rect(0, 100, 400, 200);
+  const follow = makeEl('button');
+  follow.getBoundingClientRect = rect(230, 104, 90, 28); // "+ Follow" left of "…" on the top row
+  const secondRow = makeEl('button');
+  secondRow.getBoundingClientRect = rect(150, 140, 90, 28); // below the pill's row: ignored
+  const hidden = makeEl('button');
+  hidden.getBoundingClientRect = rect(0, 0, 0, 0);
+  card.append(follow, secondRow, hidden);
+  root.appendChild(card);
+  ioCallback([{ isIntersecting: true, target: card }]);
+  const pill = pillOf(card);
+  check('pill clears a Follow button on its row', pill?.style.getPropertyValue('--larp-pill-right') === '178px', pill?.style.getPropertyValue('--larp-pill-right'));
+  const stamp = card.querySelectorAll('.larp-badge').find((b) => b.classList.contains('larp-stamp'));
+  check('stamp follows the pill offset', stamp?.style.getPropertyValue('--larp-pill-right') === '178px');
+
+  follow.getBoundingClientRect = rect(300, 140, 90, 28); // Follow moved to a second row
+  intervalFn();
+  check('pill re-measures on rescan and falls back to 96px', pill.style.getPropertyValue('--larp-pill-right') === '96px', pill.style.getPropertyValue('--larp-pill-right'));
+
+  // LinkedIn re-renders the card contents in place and drops our pill
+  analyzedUrns.length = 0;
+  for (const b of card.querySelectorAll('.larp-badge')) b.remove();
+  intervalFn();
+  check('a pill dropped by a re-render is restored on rescan', Boolean(pillOf(card)));
+  check('...without another ANALYZE_POST call', analyzedUrns.length === 0, analyzedUrns.join(','));
+  card.remove();
+}
+
+// Card seen before its text rendered: retried, not skipped forever ----------
+{
+  const card = makePostCard('update-card-focus-lazy', '');
+  root.appendChild(card);
+  analyzedUrns.length = 0;
+  ioCallback([{ isIntersecting: true, target: card }]);
+  check('textless card is not analyzed yet', !analyzedUrns.includes('update-card-focus-lazy'));
+  card.querySelector('[data-testid="expandable-text-box"]').innerText = 'The text arrived a moment after the card shell rendered.';
+  intervalFn();
+  check('card is analyzed once its text renders', analyzedUrns.includes('update-card-focus-lazy'));
+  card.remove();
+
+  const imageOnly = makePostCard('update-card-focus-image-only', '');
+  root.appendChild(imageOnly);
+  for (let i = 0; i < 8; i++) intervalFn();
+  const skippedBefore = window.__larpDebug.skipped;
+  intervalFn();
+  check('a card that never gets text stops being retried', window.__larpDebug.skipped === skippedBefore);
+  imageOnly.remove();
+}
 
 // Page without posts (messaging, settings…): the periodic scan stops
 outerReshare.remove();
