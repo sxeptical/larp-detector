@@ -63,6 +63,38 @@ function check(name, condition, extra = '') {
   console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? `  — ${extra}` : ''}`);
 }
 
+/**
+ * Run `promise`, but turn a hang into a descriptive failure instead of a stuck
+ * suite. Used where a regression would otherwise leave a promise parked forever.
+ */
+async function withTimeout(promise, ms, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} did not settle within ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Give the worker's message handler room to reach its next decision without
+ * relying on wall-clock time. Draining microtasks is an *ordering* guarantee
+ * (the queue is emptied to exhaustion before the next macrotask), so a loaded
+ * machine can only make this slower, never change its outcome. A handful of
+ * timer turns covers handlers that await storage (setTimeout-based mocks).
+ */
+async function flushWorkerTurns({ turns = 25 } = {}) {
+  await new Promise((resolve) => setImmediate(resolve));
+  for (let i = 0; i < turns; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 let runId = 0;
 
 /** Install fresh chrome/fetch mocks, import a new worker instance, return helpers. */
@@ -134,7 +166,8 @@ for (const [layout, seed] of Object.entries(LAYOUTS)) {
   {
     const w = await wake({ latencyMs: 25, stored: seed(LIVE_SETTINGS) });
     const res = await w.call({ type: 'SET_SETTINGS', patch: { sensitivity: 2 } }); // first message, load still in flight
-    await delay(250);
+    // No sleep: SET_SETTINGS only responds after persistSettings() has awaited the
+    // storage write, so the store is already up to date here.
     const saved = w.store.get('larp_settings');
     const keys = { ...w.store.get('larp_secrets'), ...saved }; // wherever this build keeps them
     check(`[${layout}] cold SET_SETTINGS keeps the patch`, saved.sensitivity === 2 && res.settings.sensitivity === 2);
@@ -228,41 +261,84 @@ for (const [layout, seed] of Object.entries(LAYOUTS)) {
 }
 
 // 6. CLEAR_CACHE in-flight guard ---------------------------------------------
+// Every wait here is on an observable state change (a fetch being issued, a
+// promise settling) plus explicit microtask/timer-turn flushes — never a fixed
+// millisecond sleep — so a loaded machine cannot reorder the sequence into a
+// false failure.
 {
   const w = await wake({ stored: { larp_settings: { ...LIVE_SETTINGS, sensitivity: 0 }, larp_secrets: KEYS } });
   const resolvers = [];
-  globalThis.fetch = () =>
-    new Promise((resolve) => {
-      w.fetchCalls++;
+  let fetchWaiter = null;
+  /** Resolve as soon as the *next* fetch is issued. Register it before triggering. */
+  const nextFetchCall = () => new Promise((resolve) => { fetchWaiter = resolve; });
+
+  globalThis.fetch = () => {
+    w.fetchCalls++;
+    // A third fetch means request 3 failed to dedupe. Fail it immediately instead
+    // of parking it: an extra parked promise deadlocks the block, and used to
+    // crash it as `resolvers[1] is not a function`, hiding the real assertion.
+    if (w.fetchCalls > 2) {
+      return Promise.resolve(new Response('unexpected extra fetch', { status: 500 }));
+    }
+    const parked = new Promise((resolve) => {
       resolvers.push(() => resolve(new Response(JSON.stringify(jevResponse()), { status: 200 })));
     });
+    if (fetchWaiter) { const fire = fetchWaiter; fetchWaiter = null; fire(); }
+    return parked;
+  };
 
-  // Start request 1 (in flight)
-  const p1 = w.call({ type: 'ANALYZE_POST', post: POST }, CONTENT_SCRIPT);
-  await delay(10);
-  check('request 1 started fetch #1', w.fetchCalls === 1);
+  /** Release a parked fetch, or fail with a message that names the problem. */
+  const release = (index) => {
+    if (typeof resolvers[index] !== 'function') {
+      throw new Error(`expected a parked fetch #${index + 1}, saw ${resolvers.length} fetch call(s)`);
+    }
+    resolvers[index]();
+  };
 
-  // Clear cache while request 1 is in flight, then start request 2 for the same post
-  await w.call({ type: 'CLEAR_CACHE' });
-  const p2 = w.call({ type: 'ANALYZE_POST', post: POST }, CONTENT_SCRIPT);
-  await delay(10);
-  check('request 2 started fetch #2 after CLEAR_CACHE', w.fetchCalls === 2);
+  try {
+    // Start request 1 (in flight) and wait for its fetch to be issued.
+    const f1 = nextFetchCall();
+    const p1 = w.call({ type: 'ANALYZE_POST', post: POST }, CONTENT_SCRIPT);
+    await withTimeout(f1, 5000, 'fetch #1 to be issued');
+    check('request 1 started fetch #1', w.fetchCalls === 1, `fetchCalls=${w.fetchCalls}`);
 
-  // Finish request 1 first — its .finally() must NOT delete request 2 from inflight
-  resolvers[0]();
-  await p1;
-  const statsMid = await w.call({ type: 'GET_STATS' });
-  check('pre-clear in-flight request does not write back to cache', statsMid.stats.cacheSize === 0);
+    // Clear cache while request 1 is in flight, then start request 2 for the same post
+    await w.call({ type: 'CLEAR_CACHE' });
+    const f2 = nextFetchCall();
+    const p2 = w.call({ type: 'ANALYZE_POST', post: POST }, CONTENT_SCRIPT);
+    await withTimeout(f2, 5000, 'fetch #2 to be issued after CLEAR_CACHE');
+    check('request 2 started fetch #2 after CLEAR_CACHE', w.fetchCalls === 2, `fetchCalls=${w.fetchCalls}`);
 
-  // Request 3 arrives while request 2 is still in flight — must dedupe onto request 2
-  const p3 = w.call({ type: 'ANALYZE_POST', post: POST }, CONTENT_SCRIPT);
-  await delay(10);
-  check('settled pre-clear request did not evict request 2 from inflight', w.fetchCalls === 2, `fetchCalls=${w.fetchCalls}`);
+    // Finish request 1 first — its .finally() must NOT delete request 2 from inflight
+    release(0);
+    await withTimeout(p1, 5000, 'request 1 to settle');
+    const statsMid = await w.call({ type: 'GET_STATS' });
+    check('pre-clear in-flight request does not write back to cache', statsMid.stats.cacheSize === 0);
 
-  resolvers[1]();
-  await Promise.all([p2, p3]);
-  const statsAfter = await w.call({ type: 'GET_STATS' });
-  check('post-clear request writes to cache once settled', statsAfter.stats.cacheSize === 1);
+    // Request 3 arrives while request 2 is still in flight — must dedupe onto request 2.
+    // A deduped request 3 can neither settle (its fetch is still parked) nor issue a
+    // fetch; a regressed one does one of those two things. Waiting for either
+    // observable means no sleep is needed and no load can flip the result.
+    let p3Settled = false;
+    const p3 = w.call({ type: 'ANALYZE_POST', post: POST }, CONTENT_SCRIPT);
+    p3.then(() => { p3Settled = true; }, () => { p3Settled = true; });
+    await flushWorkerTurns();
+    check('settled pre-clear request did not evict request 2 from inflight',
+          w.fetchCalls === 2 && !p3Settled,
+          `fetchCalls=${w.fetchCalls} p3Settled=${p3Settled}`);
+
+    release(1);
+    const [r2, r3] = await withTimeout(Promise.all([p2, p3]), 5000, 'request 2 and request 3 to settle');
+    check("request 3 shared request 2's verdict (deduped, did not re-fetch)",
+          Boolean(r2.verdict) && r2.verdict === r3.verdict,
+          `same=${r2.verdict === r3.verdict}`);
+
+    const statsAfter = await w.call({ type: 'GET_STATS' });
+    check('post-clear request writes to cache once settled', statsAfter.stats.cacheSize === 1);
+  } catch (err) {
+    // A regression must read as a failure, never as a crash or a hung suite.
+    check('CLEAR_CACHE in-flight guard block ran to completion', false, err.message);
+  }
 }
 
 console.log(failures === 0 ? '\nAll worker-state tests passed.' : `\n${failures} worker-state test(s) FAILED.`);
